@@ -11,14 +11,6 @@ const MobileArtifactPanel = ({
     const [prismLoaded, setPrismLoaded] = useState(false);
     const [copied, setCopied] = useState(false);
 
-    // Streaming state for mobile artifacts (shared logic with desktop)
-    const [displayedContent, setDisplayedContent] = useState({});
-    const [streamingArtifactId, setStreamingArtifactId] = useState(null);
-    const artifactStreamIntervalRef = useRef(null);
-    const artifactTargetContentRef = useRef('');
-    const artifactCurrentIndexRef = useRef(0);
-
-
     const copyToClipboard = () => {
         if (activeArtifact && artifacts[activeArtifact]) {
             navigator.clipboard.writeText(artifacts[activeArtifact].content);
@@ -26,7 +18,6 @@ const MobileArtifactPanel = ({
             setTimeout(() => setCopied(false), 2000);
         }
     };
-
 
     // Check if Prism is loaded (it should be loaded by ArtifactCanvas first)
     useEffect(() => {
@@ -41,134 +32,9 @@ const MobileArtifactPanel = ({
         checkPrismLoaded();
     }, []);
 
-    // Clean up streaming on unmount
-    useEffect(() => {
-        return () => {
-            if (artifactStreamIntervalRef.current) {
-                clearInterval(artifactStreamIntervalRef.current);
-            }
-        };
-    }, []);
-
-    // Handle artifact content changes - start streaming from current to target
-    useEffect(() => {
-        if (!activeArtifact || !artifacts[activeArtifact] || !showArtifacts) return;
-
-        const targetContent = artifacts[activeArtifact].content || '';
-        const currentDisplayed = displayedContent[activeArtifact] || '';
-
-        // If target is different from what we're displaying, start streaming
-        if (targetContent !== currentDisplayed) {
-            startArtifactStreaming(activeArtifact, currentDisplayed, targetContent);
-        }
-    }, [artifacts, activeArtifact, showArtifacts]);
-
-    // Start streaming artifact content from current to target
-    const startArtifactStreaming = (artifactId, fromContent, toContent) => {
-        // Stop any existing streaming
-        if (artifactStreamIntervalRef.current) {
-            clearInterval(artifactStreamIntervalRef.current);
-        }
-
-        // If from and to are the same, just set it
-        if (fromContent === toContent) {
-            setDisplayedContent(prev => ({
-                ...prev,
-                [artifactId]: toContent
-            }));
-            return;
-        }
-
-        setStreamingArtifactId(artifactId);
-        artifactTargetContentRef.current = toContent;
-        artifactCurrentIndexRef.current = fromContent.length;
-
-        // If we're starting from scratch, start from 0
-        if (!fromContent) {
-            artifactCurrentIndexRef.current = 0;
-            setDisplayedContent(prev => ({
-                ...prev,
-                [artifactId]: ''
-            }));
-        }
-
-        // Calculate streaming speed based on remaining content (slightly faster for mobile)
-        const remainingLength = toContent.length - fromContent.length;
-        const baseSpeed = 12; // Faster for mobile
-        const speed = Math.max(3, Math.min(baseSpeed, baseSpeed * (800 / Math.max(remainingLength, 1))));
-
-        artifactStreamIntervalRef.current = setInterval(() => {
-            const currentIndex = artifactCurrentIndexRef.current;
-            const targetContent = artifactTargetContentRef.current;
-
-            if (currentIndex >= targetContent.length) {
-                // Streaming complete
-                clearInterval(artifactStreamIntervalRef.current);
-                artifactStreamIntervalRef.current = null;
-                setStreamingArtifactId(null);
-                setDisplayedContent(prev => ({
-                    ...prev,
-                    [artifactId]: targetContent
-                }));
-                return;
-            }
-
-            // Stream multiple characters for better performance
-            const charsToAdd = Math.min(3, targetContent.length - currentIndex);
-            const nextIndex = currentIndex + charsToAdd;
-            const newContent = targetContent.substring(0, nextIndex);
-
-            setDisplayedContent(prev => ({
-                ...prev,
-                [artifactId]: newContent
-            }));
-
-            artifactCurrentIndexRef.current = nextIndex;
-        }, speed);
-    };
-
-    // Stop artifact streaming
-    const stopArtifactStreaming = () => {
-        if (artifactStreamIntervalRef.current) {
-            clearInterval(artifactStreamIntervalRef.current);
-            artifactStreamIntervalRef.current = null;
-        }
-
-        if (streamingArtifactId && artifacts[streamingArtifactId]) {
-            const targetContent = artifacts[streamingArtifactId].content || '';
-            setDisplayedContent(prev => ({
-                ...prev,
-                [streamingArtifactId]: targetContent
-            }));
-            setStreamingArtifactId(null);
-        }
-    };
-
-    // Initialize displayed content for new artifacts
-    useEffect(() => {
-        const newDisplayed = {...displayedContent};
-        let hasChanges = false;
-
-        Object.keys(artifacts).forEach(id => {
-            if (!(id in newDisplayed)) {
-                newDisplayed[id] = '';
-                hasChanges = true;
-            }
-        });
-
-        if (hasChanges) {
-            setDisplayedContent(newDisplayed);
-        }
-    }, [artifacts]);
-
-    // Highlight code when content changes - with better DOM conflict handling
+    // Highlight code when content changes
     useEffect(() => {
         if (prismLoaded && window.Prism && codeRef.current && showArtifacts && activeArtifact && artifacts[activeArtifact]) {
-            // Don't highlight while streaming to avoid DOM conflicts
-            if (streamingArtifactId === activeArtifact) {
-                return;
-            }
-
             const timeoutId = setTimeout(() => {
                 if (window.Prism.highlightElement && codeRef.current) {
                     try {
@@ -205,7 +71,7 @@ const MobileArtifactPanel = ({
 
             return () => clearTimeout(timeoutId);
         }
-    }, [activeArtifact, displayedContent, showArtifacts, prismLoaded, streamingArtifactId]);
+    }, [activeArtifact, artifacts, showArtifacts, prismLoaded]);
 
     const getLanguageFromType = (artifact) => {
         if (!artifact) return 'text';
@@ -283,17 +149,21 @@ const MobileArtifactPanel = ({
             artifact.type === 'text/html';
     };
 
-    // Get the content to display - fallback to actual content if streaming fails
-    const getDisplayContent = (artifactId) => {
-        if (!artifactId || !artifacts[artifactId]) return '';
-        // Always show something - prefer displayed content but fallback to actual
-        return displayedContent[artifactId] || artifacts[artifactId].content || '';
-    };
-
-    // Streaming cursor component for artifacts
-    const ArtifactStreamingCursor = () => (
-        <span className="inline-block w-2 h-4 bg-green-400 animate-pulse ml-1"></span>
+    // Version indicator component
+    const VersionIndicator = ({ version }) => (
+        <span className="text-xs text-slate-500 ml-2">v{version}</span>
     );
+
+    // Status indicator for incomplete artifacts
+    const StatusIndicator = ({ isComplete }) => {
+        if (isComplete) return null;
+        return (
+            <span className="text-xs text-amber-500 ml-2 flex items-center gap-1">
+                <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+                Incomplete
+            </span>
+        );
+    };
 
     return (
         <div
@@ -303,10 +173,7 @@ const MobileArtifactPanel = ({
                 <div className="bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
                     <h2 className="text-white font-semibold">Artifacts</h2>
                     <button
-                        onClick={() => {
-                            stopArtifactStreaming();
-                            setShowArtifacts(false);
-                        }}
+                        onClick={() => setShowArtifacts(false)}
                         className="p-2 text-slate-400 hover:text-white transition-colors"
                     >
                         <X className="w-5 h-5"/>
@@ -333,10 +200,8 @@ const MobileArtifactPanel = ({
                                 <FileText className="w-4 h-4"/>
                             )}
                             <span className="text-sm">{artifact.title || 'Untitled'}</span>
-                            {/* Show streaming indicator */}
-                            {streamingArtifactId === artifact.id && (
-                                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                            )}
+                            <VersionIndicator version={artifact.version} />
+                            <StatusIndicator isComplete={artifact.isComplete} />
                         </button>
                     ))}
                 </div>
@@ -359,20 +224,14 @@ const MobileArtifactPanel = ({
                                 <code
                                     ref={codeRef}
                                     className={`language-${getLanguageFromType(artifacts[activeArtifact])}`}
-                                    key={`${activeArtifact}-${streamingArtifactId === activeArtifact ? 'streaming' : 'static'}`}
+                                    key={`${activeArtifact}-${artifacts[activeArtifact].version}`}
                                 >
-                                    {getDisplayContent(activeArtifact) || (
-                                        <span className="text-slate-500 italic">Creating artifact...</span>
-                                    )}
+                                    {artifacts[activeArtifact].content || ''}
                                 </code>
-                                {/* Show streaming cursor outside code element to avoid DOM conflicts */}
-                                {streamingArtifactId === activeArtifact && (
-                                    <ArtifactStreamingCursor/>
-                                )}
                             </pre>
                         ) : artifacts[activeArtifact].type === 'text/html' ? (
                             <iframe
-                                srcDoc={getDisplayContent(activeArtifact) || '<p>Loading...</p>'}
+                                srcDoc={artifacts[activeArtifact].content || '<p>Loading...</p>'}
                                 className="w-full h-full border-0"
                                 sandbox="allow-scripts allow-same-origin"
                             />
@@ -385,21 +244,13 @@ const MobileArtifactPanel = ({
                                 </div>
                                 <pre className="text-slate-300 font-mono whitespace-pre-wrap">
                                     <code>
-                                        {getDisplayContent(activeArtifact) || 'Loading...'}
-                                        {streamingArtifactId === activeArtifact && (
-                                            <ArtifactStreamingCursor/>
-                                        )}
+                                        {artifacts[activeArtifact].content || ''}
                                     </code>
                                 </pre>
                             </div>
                         ) : (
                             <div className="p-4 text-slate-300 text-xs h-full overflow-auto whitespace-pre-wrap">
-                                {getDisplayContent(activeArtifact) || (
-                                    <span className="text-slate-500 italic">Creating artifact...</span>
-                                )}
-                                {streamingArtifactId === activeArtifact && (
-                                    <ArtifactStreamingCursor/>
-                                )}
+                                {artifacts[activeArtifact].content || ''}
                             </div>
                         )}
                     </div>

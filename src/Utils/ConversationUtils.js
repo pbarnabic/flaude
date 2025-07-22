@@ -1,7 +1,9 @@
 /**
  * Utility functions for conversation management
- * These are pure functions that don't depend on React state or component-specific logic
+ * Updated to handle artifact parsing from response text
  */
+
+import { parseArtifactsFromResponse } from './ArtifactParser.js';
 
 /**
  * Build API message history from UI messages
@@ -38,20 +40,24 @@ export const buildApiMessages = (messages, currentInput) => {
 };
 
 /**
- * Extract content and tool calls from Claude's response
- * Pure function that parses API response structure
+ * Extract content, artifacts, and tool calls from Claude's response
+ * Now also parses <LLMArtifact> blocks from the text
  * @param {Object} response - Claude API response object
- * @returns {Object} { assistantContent: string, toolCalls: Array }
+ * @returns {Object} { assistantContent: string, toolCalls: Array, artifacts: Array, usage: Object }
  */
 export const parseClaudeResponse = (response) => {
-    console.log(response);
+    console.log('Parsing Claude response:', response);
     let assistantContent = '';
     let toolCalls = [];
+    let artifacts = [];
 
     if (response.content) {
         for (const block of response.content) {
             if (block.type === 'text') {
-                assistantContent += block.text;
+                // Parse artifacts from text content
+                const { text: cleanedText, artifacts: extractedArtifacts } = parseArtifactsFromResponse(block.text);
+                assistantContent += cleanedText;
+                artifacts = artifacts.concat(extractedArtifacts);
             } else if (block.type === 'tool_use') {
                 toolCalls.push({
                     id: block.id,
@@ -68,7 +74,7 @@ export const parseClaudeResponse = (response) => {
         output_tokens: 0
     };
 
-    return { assistantContent, toolCalls, usage };
+    return { assistantContent, toolCalls, artifacts, usage };
 };
 
 /**
@@ -82,4 +88,4 @@ export const formatToolResults = (toolResults) => {
         tool_use_id: r.tool_use_id,
         content: r.content
     }));
-};
+}

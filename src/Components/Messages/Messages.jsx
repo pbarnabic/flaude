@@ -6,7 +6,8 @@ import Message from '../Message/Message.jsx';
 const Messages = ({
                       messages,
                       isLoading,
-                      handleEditSubmit
+                      handleEditSubmit,
+                      streamingMessageId
                   }) => {
 
     const messagesEndRef = useRef(null);
@@ -47,14 +48,17 @@ const Messages = ({
                 {messages.filter(m => m.role !== 'tool_result').map((message) => (
                     <Message
                         key={message.id}
-                        message={message}
+                        message={{
+                            ...message,
+                            isStreaming: message.id === streamingMessageId
+                        }}
                         onEditSubmit={handleEditSubmit}
                         isLoading={isLoading}
                     />
                 ))}
 
-                {/* Loading message when API is processing */}
-                {isLoading && (
+                {/* Loading message when API is processing (only show if not streaming) */}
+                {isLoading && !streamingMessageId && (
                     <div className="flex gap-3 justify-start">
                         <div className="flex-shrink-0">
                             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
@@ -64,7 +68,7 @@ const Messages = ({
                         <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 bg-white border border-slate-200 shadow-sm text-slate-800">
                             <div className="flex items-center gap-3">
                                 <LoadingDots />
-                                <span className="text-sm text-slate-600">Claude is doing matrix muliplication...</span>
+                                <span className="text-sm text-slate-600">Claude is doing matrix multiplication...</span>
                             </div>
                         </div>
                     </div>

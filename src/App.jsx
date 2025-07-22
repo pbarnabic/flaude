@@ -8,9 +8,10 @@ import Messages from "./Components/Messages/Messages.jsx";
 import ModelSettings from "./Components/ModelSettings/ModelSettings.jsx";
 import {executeREPL} from "./Utils/Repl.js";
 import {API_KEY} from "./Constants/ApiKey.js";
-import {callClaudeAPI} from "./Requests/AnthropicRequests.js";
-import {buildApiMessages, parseClaudeResponse} from "./Utils/ConversationUtils.js";
-import {executeArtifactOperation, normalizeArtifactOperations} from "./Utils/ToolUtils.js";
+import {streamClaudeAPI} from "./Requests/StreamingAnthropicRequests.js";
+import {buildApiMessages} from "./Utils/ConversationUtils.js";
+import {processArtifactUpdate, handleArtifactRewrite} from "./Utils/ArtifactParser.js";
+import {StreamingArtifactParser} from "./Utils/StreamingArtifactsParser.js";
 import {rateLimiter, estimateTokens} from "./Utils/RateLimiter.js";
 
 const ClaudeClone = () => {
@@ -34,6 +35,9 @@ const ClaudeClone = () => {
     const [isWaiting, setIsWaiting] = useState(false);
     const [waitMessage, setWaitMessage] = useState('');
 
+    // Streaming state
+    const [streamingMessageId, setStreamingMessageId] = useState(null);
+
     /**
      * Process REPL tool calls
      */
@@ -48,60 +52,63 @@ const ClaudeClone = () => {
     };
 
     /**
-     * Process artifact tool calls and return the result
-     * This now properly tracks which artifacts were modified
+     * Process artifact update tool calls
      */
-    const processArtifactTool = (toolCall, currentArtifacts) => {
-        console.log('Processing artifact tool call:', toolCall);
+    const processArtifactUpdateTool = (toolCall, currentArtifacts) => {
+        console.log('Processing artifact update tool call:', toolCall);
 
-        let operationResult = { success: true };
-        let modifiedArtifactIds = [];
-        let updatedArtifacts = currentArtifacts;
+        const result = processArtifactUpdate(toolCall, currentArtifacts);
 
-        try {
-            const operations = normalizeArtifactOperations(toolCall.input);
-
-            for (const operation of operations) {
-                console.log(`Processing ${operation.command} operation for artifact ${operation.id}`);
-
-                // Check if artifact exists for update operations
-                if (operation.command === 'update' && !updatedArtifacts[operation.id]) {
-                    console.error(`Artifact ${operation.id} not found for update`);
-                    operationResult = { success: false, error: `Artifact ${operation.id} not found` };
-                    continue;
-                }
-
-                // Execute the operation
-                updatedArtifacts = executeArtifactOperation(operation, updatedArtifacts);
-
-                // Track which artifacts were modified
-                modifiedArtifactIds.push(operation.id);
-            }
-
-            return {
-                result: JSON.stringify(operationResult),
-                updatedArtifacts,
-                modifiedArtifactIds
+        if (result.success) {
+            // Update the artifact with new version
+            const updatedArtifacts = {
+                ...currentArtifacts,
+                [result.updatedArtifact.id]: result.updatedArtifact
             };
 
-        } catch (error) {
-            console.error('Error processing artifact tool call:', error);
             return {
-                result: JSON.stringify({ success: false, error: error.message }),
+                result: JSON.stringify({ success: true }),
+                updatedArtifacts,
+                modifiedArtifactId: result.updatedArtifact.id
+            };
+        } else {
+            return {
+                result: JSON.stringify({ success: false, error: result.error }),
                 updatedArtifacts: currentArtifacts,
-                modifiedArtifactIds: []
+                modifiedArtifactId: null
             };
         }
     };
 
+    /**
+     * Process artifacts from the parser
+     */
+    const processStreamingArtifacts = (artifacts, currentArtifacts) => {
+        let updatedArtifacts = { ...currentArtifacts };
+        let lastModifiedId = null;
+
+        for (const artifact of artifacts) {
+            // Check if this is a rewrite (artifact with same ID already exists)
+            if (updatedArtifacts[artifact.id] && artifact.isComplete) {
+                console.log(`Rewriting artifact ${artifact.id}`);
+                updatedArtifacts[artifact.id] = handleArtifactRewrite(artifact, updatedArtifacts[artifact.id]);
+            } else {
+                console.log(`Creating/updating artifact ${artifact.id}`);
+                updatedArtifacts[artifact.id] = artifact;
+            }
+            lastModifiedId = artifact.id;
+        }
+        console.log(updatedArtifacts);
+        return { updatedArtifacts, lastModifiedId };
+    };
+
     // Helper function to create UI message objects
-    const createAssistantMessage = (messageId, assistantContent, toolCalls, apiContent) => ({
+    const createAssistantMessage = (messageId, assistantContent = '') => ({
         id: messageId,
         role: 'assistant',
         content: assistantContent,
-        toolCalls: toolCalls,
-        apiContent: apiContent ? {role: 'assistant', content: apiContent} : null,
-        shouldStream: !!assistantContent.trim()
+        toolCalls: [],
+        isStreaming: true
     });
 
     const createToolResultMessage = (messageId, toolResults) => ({
@@ -118,12 +125,21 @@ const ClaudeClone = () => {
         }
     });
 
-    // Main conversation loop - handles the back-and-forth with Claude
-    const runConversationLoop = async (apiMessages, apiKey, modelSettings, setMessages) => {
+    // Main conversation loop with streaming
+    const runStreamingConversation = async (apiMessages, apiKey, modelSettings) => {
         let currentApiMessages = [...apiMessages];
         let messageIdCounter = Date.now() + 1;
+        const artifactParser = new StreamingArtifactParser();
 
         while (true) {
+            // Get current artifacts for generating update tools
+            const currentArtifacts = await new Promise(resolve => {
+                setArtifacts(current => {
+                    resolve(current);
+                    return current;
+                });
+            });
+
             // Estimate tokens for the current request
             const messageText = JSON.stringify(currentApiMessages);
             const estimatedInputTokens = estimateTokens(messageText);
@@ -147,43 +163,123 @@ const ClaudeClone = () => {
                 setWaitMessage('');
             }
 
-            // Call Claude API
-            const response = await callClaudeAPI(currentApiMessages, apiKey, modelSettings);
+            // Reset parser for new response
+            artifactParser.reset();
 
-            // Parse response with usage information
-            const {assistantContent, toolCalls, usage} = parseClaudeResponse(response);
-
-            // Record the actual token usage
-            rateLimiter.recordUsage(
-                modelSettings.model,
-                usage.input_tokens,
-                usage.output_tokens
-            );
-
-            // Create and add assistant message to UI
-            const assistantMessage = createAssistantMessage(
-                messageIdCounter++,
-                assistantContent,
-                toolCalls,
-                response.content
-            );
+            // Create initial assistant message for streaming
+            const assistantMessageId = messageIdCounter++;
+            const assistantMessage = createAssistantMessage(assistantMessageId);
             setMessages(prev => [...prev, assistantMessage]);
+            setStreamingMessageId(assistantMessageId);
 
-            // If no tool calls, conversation is complete
-            if (toolCalls.length === 0) {
-                break;
-            }
+            let accumulatedContent = '';
+            let toolCalls = [];
+            let usage = { input_tokens: 0, output_tokens: 0 };
+            let lastArtifactId = null;
 
-            // Process tool calls
-            const toolResults = [];
-            let lastModifiedArtifactId = null;
+            // Stream Claude API response
+            try {
+                const result = await streamClaudeAPI(
+                    currentApiMessages,
+                    apiKey,
+                    modelSettings,
+                    currentArtifacts,
+                    (chunk) => {
+                        if (chunk.type === 'text') {
+                            // Parse the chunk for artifacts
+                            const parseResult = artifactParser.parseChunk(chunk.content);
 
-            for (const call of toolCalls) {
-                let result;
+                            // Update message content with cleaned text
+                            accumulatedContent += parseResult.cleanedTextDelta;
+                            setMessages(prev => prev.map(msg =>
+                                msg.id === assistantMessageId
+                                    ? { ...msg, content: accumulatedContent }
+                                    : msg
+                            ));
 
-                switch (call.name) {
-                    case 'artifacts':
-                        // Get current artifacts state
+                            // Handle new artifacts
+                            if (parseResult.artifacts.length > 0) {
+                                const { updatedArtifacts, lastModifiedId } = processStreamingArtifacts(
+                                    parseResult.artifacts,
+                                    currentArtifacts
+                                );
+                                setArtifacts(updatedArtifacts);
+                                lastArtifactId = lastModifiedId;
+
+                                // Auto-open artifacts panel
+                                if (window.innerWidth >= 768) {
+                                    setShowArtifacts(true);
+                                }
+                                setActiveArtifact(lastModifiedId);
+                            }
+
+                            // Handle artifact content updates
+                            if (parseResult.activeArtifactUpdate) {
+                                setArtifacts(prev => ({
+                                    ...prev,
+                                    [parseResult.activeArtifactUpdate.id]: {
+                                        ...prev[parseResult.activeArtifactUpdate.id],
+                                        content: parseResult.activeArtifactUpdate.content,
+                                        isComplete: parseResult.activeArtifactUpdate.isComplete
+                                    }
+                                }));
+                            }
+                        } else if (chunk.type === 'tool_use') {
+                            toolCalls.push(chunk.toolCall);
+                            setMessages(prev => prev.map(msg =>
+                                msg.id === assistantMessageId
+                                    ? { ...msg, toolCalls: [...msg.toolCalls, chunk.toolCall] }
+                                    : msg
+                            ));
+                        } else if (chunk.type === 'done') {
+                            usage = chunk.usage;
+                        }
+                    }
+                );
+
+                // Finalize parsing
+                const finalResult = artifactParser.finalize();
+                if (finalResult.cleanedTextDelta) {
+                    accumulatedContent += finalResult.cleanedTextDelta;
+                }
+                if (finalResult.activeArtifactUpdate) {
+                    setArtifacts(prev => ({
+                        ...prev,
+                        [finalResult.activeArtifactUpdate.id]: {
+                            ...prev[finalResult.activeArtifactUpdate.id],
+                            content: finalResult.activeArtifactUpdate.content,
+                            isComplete: finalResult.activeArtifactUpdate.isComplete
+                        }
+                    }));
+                }
+
+                // Update final message state
+                setMessages(prev => prev.map(msg =>
+                    msg.id === assistantMessageId
+                        ? { ...msg, content: accumulatedContent, isStreaming: false }
+                        : msg
+                ));
+                setStreamingMessageId(null);
+
+                // Record token usage
+                rateLimiter.recordUsage(
+                    modelSettings.model,
+                    usage.input_tokens,
+                    usage.output_tokens
+                );
+
+                // If no tool calls, conversation is complete
+                if (toolCalls.length === 0) {
+                    break;
+                }
+
+                // Process tool calls
+                const toolResults = [];
+                for (const call of toolCalls) {
+                    let result;
+
+                    // Check if this is an artifact update tool
+                    if (call.name.startsWith('update_artifact_')) {
                         const currentArtifacts = await new Promise(resolve => {
                             setArtifacts(current => {
                                 resolve(current);
@@ -191,62 +287,62 @@ const ClaudeClone = () => {
                             });
                         });
 
-                        // Process artifact operations
-                        const artifactProcessResult = processArtifactTool(call, currentArtifacts);
+                        const artifactProcessResult = processArtifactUpdateTool(call, currentArtifacts);
 
                         // Update artifacts state
                         setArtifacts(artifactProcessResult.updatedArtifacts);
 
-                        // Track the last modified artifact
-                        if (artifactProcessResult.modifiedArtifactIds.length > 0) {
-                            lastModifiedArtifactId = artifactProcessResult.modifiedArtifactIds[
-                            artifactProcessResult.modifiedArtifactIds.length - 1
-                                ];
+                        if (artifactProcessResult.modifiedArtifactId) {
+                            setActiveArtifact(artifactProcessResult.modifiedArtifactId);
                         }
 
                         result = artifactProcessResult.result;
-                        break;
-
-                    case 'repl':
+                    } else if (call.name === 'repl') {
                         result = await processReplTool(call);
-                        break;
-
-                    default:
+                    } else {
                         console.warn('Unknown tool:', call.name);
                         result = JSON.stringify({success: false, error: 'Unknown tool'});
+                    }
+
+                    toolResults.push({
+                        tool_use_id: call.id,
+                        content: result
+                    });
                 }
 
-                toolResults.push({
-                    tool_use_id: call.id,
-                    content: result
-                });
+                // Create and add tool result message
+                const toolResultMessage = createToolResultMessage(messageIdCounter++, toolResults);
+                setMessages(prev => [...prev, toolResultMessage]);
+
+                // Update API messages for next iteration
+                currentApiMessages = [
+                    ...currentApiMessages,
+                    {
+                        role: 'assistant',
+                        content: toolCalls.map(tc => ({
+                            type: 'tool_use',
+                            id: tc.id,
+                            name: tc.name,
+                            input: tc.input
+                        }))
+                    },
+                    {role: 'user', content: toolResultMessage.apiContent.content}
+                ];
+
+            } catch (error) {
+                console.error('Streaming error:', error);
+                setMessages(prev => prev.map(msg =>
+                    msg.id === assistantMessageId
+                        ? { ...msg, content: `Error: ${error.message}`, isStreaming: false }
+                        : msg
+                ));
+                setStreamingMessageId(null);
+                break;
             }
-
-            // Handle UI updates after processing all tools
-            if (lastModifiedArtifactId) {
-                console.log('Setting active artifact to:', lastModifiedArtifactId);
-                setActiveArtifact(lastModifiedArtifactId);
-
-                // Auto-open artifacts panel on desktop
-                if (window.innerWidth >= 768) {
-                    setShowArtifacts(true);
-                }
-            }
-
-            // Create and add tool result message
-            const toolResultMessage = createToolResultMessage(messageIdCounter++, toolResults);
-            setMessages(prev => [...prev, toolResultMessage]);
-
-            // Update API messages for next iteration
-            currentApiMessages = [
-                ...currentApiMessages,
-                {role: 'assistant', content: response.content},
-                {role: 'user', content: toolResultMessage.apiContent.content}
-            ];
         }
     };
 
-    // Simplified main handleSend function
+    // Main handleSend function with streaming
     const handleSend = async () => {
         // Early return for invalid input
         if (!input.trim() || !apiKey) return;
@@ -265,12 +361,11 @@ const ClaudeClone = () => {
             // Build API message history
             const apiMessages = buildApiMessages(messages, input);
 
-            // Run the conversation loop until Claude stops using tools
-            await runConversationLoop(
+            // Run the streaming conversation loop
+            await runStreamingConversation(
                 apiMessages,
                 apiKey,
-                modelSettings,
-                setMessages
+                modelSettings
             );
 
         } catch (error) {
@@ -290,6 +385,7 @@ const ClaudeClone = () => {
         setMessages([]);
         setArtifacts({});
         setActiveArtifact(null);
+        setStreamingMessageId(null);
     };
 
     const handleEditSubmit = async (messageId, newContent) => {
@@ -318,9 +414,10 @@ const ClaudeClone = () => {
     };
 
     const handleStop = () => {
-        // todo: implement stop functionality
+        // todo: implement stop functionality for streaming
         setIsLoading(false);
         setIsWaiting(false);
+        setStreamingMessageId(null);
     };
 
     return (
@@ -360,6 +457,7 @@ const ClaudeClone = () => {
                     messages={messages}
                     isLoading={isLoading}
                     handleEditSubmit={handleEditSubmit}
+                    streamingMessageId={streamingMessageId}
                 />
 
                 {/* Rate Limit Waiting Indicator */}

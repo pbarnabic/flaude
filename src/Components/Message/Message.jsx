@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { Bot, User, Edit3, Check, X } from 'lucide-react';
 
 // Streaming cursor component
@@ -172,100 +172,10 @@ const MarkdownRenderer = ({ content }) => {
     );
 };
 
-// Custom hook for streaming text
-const useStreamingText = (messageId, fullContent, shouldStream, onComplete) => {
-    const [displayContent, setDisplayContent] = useState('');
-    const [isStreaming, setIsStreaming] = useState(false);
-
-    const streamingIntervalRef = useRef(null);
-    const currentIndexRef = useRef(0);
-    const hasStreamedRef = useRef(false);
-
-    useEffect(() => {
-        // Reset when message ID changes (new message)
-        if (messageId) {
-            hasStreamedRef.current = false;
-            currentIndexRef.current = 0;
-        }
-    }, [messageId]);
-
-    useEffect(() => {
-        // Don't stream if we shouldn't or if we already have
-        if (!shouldStream || hasStreamedRef.current || !fullContent) {
-            setDisplayContent(fullContent || '');
-            return;
-        }
-
-        hasStreamedRef.current = true;
-        startStreaming(fullContent);
-
-        return () => {
-            if (streamingIntervalRef.current) {
-                clearInterval(streamingIntervalRef.current);
-                streamingIntervalRef.current = null;
-            }
-        };
-    }, [fullContent, shouldStream]);
-
-    const startStreaming = (content) => {
-        setIsStreaming(true);
-        currentIndexRef.current = 0;
-        setDisplayContent('');
-
-        // Calculate streaming speed - faster for better UX
-        const baseSpeed = 15; // Reduced from 20
-        const contentLength = content.length;
-        const speed = Math.max(3, Math.min(baseSpeed, baseSpeed * (500 / contentLength))); // Faster calculation
-
-        streamingIntervalRef.current = setInterval(() => {
-            const currentIndex = currentIndexRef.current;
-
-            if (currentIndex >= content.length) {
-                // Streaming complete
-                clearInterval(streamingIntervalRef.current);
-                streamingIntervalRef.current = null;
-                setIsStreaming(false);
-                setDisplayContent(content);
-
-                if (onComplete) {
-                    onComplete();
-                }
-                return;
-            }
-
-            // Stream multiple characters at once for faster streaming
-            const charsToAdd = Math.min(2, content.length - currentIndex); // Reduced from 3
-            const nextIndex = currentIndex + charsToAdd;
-            const streamedContent = content.substring(0, nextIndex);
-
-            setDisplayContent(streamedContent);
-            currentIndexRef.current = nextIndex;
-        }, speed);
-    };
-
-    return { displayContent, isStreaming };
-};
-
-// Message component that handles its own streaming
+// Message component without fake streaming
 const Message = ({ message, onEditSubmit, isLoading }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editContent, setEditContent] = useState(message.content);
-
-    // Use streaming hook for assistant messages
-    const shouldStream = message.role === 'assistant' && message.shouldStream;
-
-    const { displayContent, isStreaming } = useStreamingText(
-        message.id,
-        message.content,
-        shouldStream,
-        () => {
-            // Streaming complete - no callback needed to main component
-            // This keeps the separation clean
-        }
-    );
-
-    // For non-streaming messages, use the message content directly
-    const contentToShow = shouldStream ? displayContent : message.content;
 
     // Edit handlers
     const handleStartEdit = () => {
@@ -370,8 +280,8 @@ const Message = ({ message, onEditSubmit, isLoading }) => {
             </div>
             <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 bg-white border border-slate-200 shadow-sm text-slate-800">
                 <div className="text-sm sm:text-base">
-                    <MarkdownRenderer content={contentToShow} />
-                    {isStreaming && <StreamingCursor />}
+                    <MarkdownRenderer content={message.content} />
+                    {message.isStreaming && <StreamingCursor />}
                 </div>
                 {message.toolCalls && message.toolCalls.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-slate-200">
