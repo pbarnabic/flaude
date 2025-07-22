@@ -1,5 +1,5 @@
 import {Check, Code, Copy, FileText, Play, X} from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, {useEffect, useRef, useState} from "react";
 
 const ArtifactCanvas = ({
                             artifacts,
@@ -7,11 +7,28 @@ const ArtifactCanvas = ({
                             setShowArtifacts,
                             activeArtifact,
                             setActiveArtifact,
-                            copyToClipboard,
-                            copied,
+                            showDebugInfo = false,
                         }) => {
     const codeRef = useRef(null);
     const [prismLoaded, setPrismLoaded] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+
+    // Streaming state for artifacts
+    const [displayedContent, setDisplayedContent] = useState({});
+    const [streamingArtifactId, setStreamingArtifactId] = useState(null);
+    const artifactStreamIntervalRef = useRef(null);
+    const artifactTargetContentRef = useRef('');
+    const artifactCurrentIndexRef = useRef(0);
+
+
+    const copyToClipboard = () => {
+        if (activeArtifact && artifacts[activeArtifact]) {
+            navigator.clipboard.writeText(artifacts[activeArtifact].content);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
 
     // Load Prism.js properly with sequential loading
     useEffect(() => {
@@ -41,7 +58,6 @@ const ArtifactCanvas = ({
 
                 // Ensure Prism is ready and has basic structure
                 if (!window.Prism || !window.Prism.languages) {
-                    console.warn('Prism core not properly loaded');
                     return;
                 }
 
@@ -58,11 +74,9 @@ const ArtifactCanvas = ({
                         const script = document.createElement('script');
                         script.src = `https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/${lang}`;
                         script.onload = () => {
-                            console.log(`Loaded ${lang}`);
                             resolve();
                         };
                         script.onerror = () => {
-                            console.warn(`Failed to load ${lang}`);
                             resolve(); // Continue even if one fails
                         };
                         document.head.appendChild(script);
@@ -96,11 +110,9 @@ const ArtifactCanvas = ({
                             const script = document.createElement('script');
                             script.src = `https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/${lang}`;
                             script.onload = () => {
-                                console.log(`Loaded ${lang}`);
                                 resolve();
                             };
                             script.onerror = () => {
-                                console.warn(`Failed to load ${lang}`);
                                 resolve();
                             };
                             document.head.appendChild(script);
@@ -111,41 +123,184 @@ const ArtifactCanvas = ({
                 setPrismLoaded(true);
 
             } catch (error) {
-                console.warn('Failed to load Prism.js:', error);
+                // Silent error handling
             }
         };
 
         loadPrism();
     }, []);
 
-    // Highlight code when content changes
+    // Clean up streaming on unmount
+    useEffect(() => {
+        return () => {
+            if (artifactStreamIntervalRef.current) {
+                clearInterval(artifactStreamIntervalRef.current);
+            }
+        };
+    }, []);
+
+    // Handle artifact content changes - start streaming from current to target
+    useEffect(() => {
+        if (!activeArtifact || !artifacts[activeArtifact]) return;
+
+        const targetContent = artifacts[activeArtifact].content || '';
+        const currentDisplayed = displayedContent[activeArtifact] || '';
+
+        // If target is different from what we're displaying, start streaming
+        if (targetContent !== currentDisplayed) {
+            startArtifactStreaming(activeArtifact, currentDisplayed, targetContent);
+        }
+    }, [artifacts, activeArtifact]);
+
+    // Start streaming artifact content from current to target
+    const startArtifactStreaming = (artifactId, fromContent, toContent) => {
+        // Stop any existing streaming
+        if (artifactStreamIntervalRef.current) {
+            clearInterval(artifactStreamIntervalRef.current);
+        }
+
+        // If from and to are the same, just set it
+        if (fromContent === toContent) {
+            setDisplayedContent(prev => ({
+                ...prev,
+                [artifactId]: toContent
+            }));
+            return;
+        }
+
+        setStreamingArtifactId(artifactId);
+        artifactTargetContentRef.current = toContent;
+
+        // Always start from the current displayed content length
+        artifactCurrentIndexRef.current = fromContent.length;
+
+        // If we're starting from scratch or the new content is shorter, start from 0
+        if (!fromContent || toContent.length < fromContent.length) {
+            artifactCurrentIndexRef.current = 0;
+            setDisplayedContent(prev => ({
+                ...prev,
+                [artifactId]: ''
+            }));
+        } else {
+            // We're continuing from existing content
+            setDisplayedContent(prev => ({
+                ...prev,
+                [artifactId]: fromContent
+            }));
+        }
+
+        // Calculate streaming speed
+        const baseSpeed = 15;
+        const speed = Math.max(3, baseSpeed);
+
+        artifactStreamIntervalRef.current = setInterval(() => {
+            const currentIndex = artifactCurrentIndexRef.current;
+            const targetContent = artifactTargetContentRef.current;
+
+            if (currentIndex >= targetContent.length) {
+                // Streaming complete
+                clearInterval(artifactStreamIntervalRef.current);
+                artifactStreamIntervalRef.current = null;
+                setStreamingArtifactId(null);
+                setDisplayedContent(prev => ({
+                    ...prev,
+                    [artifactId]: targetContent
+                }));
+                return;
+            }
+
+            // Stream characters
+            const charsToAdd = Math.min(2, targetContent.length - currentIndex);
+            const nextIndex = currentIndex + charsToAdd;
+            const newContent = targetContent.substring(0, nextIndex);
+
+            setDisplayedContent(prev => ({
+                ...prev,
+                [artifactId]: newContent
+            }));
+
+            artifactCurrentIndexRef.current = nextIndex;
+        }, speed);
+    };
+
+    // Stop artifact streaming
+    const stopArtifactStreaming = () => {
+        if (artifactStreamIntervalRef.current) {
+            clearInterval(artifactStreamIntervalRef.current);
+            artifactStreamIntervalRef.current = null;
+        }
+
+        if (streamingArtifactId && artifacts[streamingArtifactId]) {
+            const targetContent = artifacts[streamingArtifactId].content || '';
+            setDisplayedContent(prev => ({
+                ...prev,
+                [streamingArtifactId]: targetContent
+            }));
+            setStreamingArtifactId(null);
+        }
+    };
+
+    // Initialize displayed content for new artifacts
+    useEffect(() => {
+        const newDisplayed = {...displayedContent};
+        let hasChanges = false;
+
+        Object.keys(artifacts).forEach(id => {
+            if (!(id in newDisplayed)) {
+                newDisplayed[id] = '';
+                hasChanges = true;
+            }
+        });
+
+        if (hasChanges) {
+            setDisplayedContent(newDisplayed);
+        }
+    }, [artifacts]);
+
+    // Highlight code when content changes - with better DOM conflict handling
     useEffect(() => {
         if (prismLoaded && window.Prism && codeRef.current && activeArtifact && artifacts[activeArtifact]) {
+            // Don't highlight while streaming to avoid DOM conflicts
+            if (streamingArtifactId === activeArtifact) {
+                return;
+            }
+
             // Wait longer to ensure all dependencies are loaded
-            setTimeout(() => {
+            const timeoutId = setTimeout(() => {
                 if (window.Prism.highlightElement && codeRef.current) {
                     try {
                         const language = getLanguageFromType(artifacts[activeArtifact]);
-                        console.log(`Attempting to highlight with language: ${language}`);
+
+                        // Clear any existing Prism classes and content to avoid conflicts
+                        const codeElement = codeRef.current;
+                        codeElement.className = `language-${language}`;
+
+                        // Remove any existing Prism-generated elements
+                        const existingHighlights = codeElement.querySelectorAll('.token');
+                        existingHighlights.forEach(el => {
+                            if (el.parentNode === codeElement) {
+                                el.replaceWith(document.createTextNode(el.textContent || ''));
+                            }
+                        });
 
                         // Check if the language is actually available
                         if (language !== 'text' && !window.Prism.languages[language]) {
-                            console.warn(`Language ${language} not available, falling back to text`);
-                            codeRef.current.className = 'language-text';
+                            codeElement.className = 'language-text';
                         }
 
-                        window.Prism.highlightElement(codeRef.current);
+                        window.Prism.highlightElement(codeElement);
                     } catch (error) {
-                        console.warn('Prism highlighting failed:', error);
                         // Clear any existing highlighting classes on error
                         if (codeRef.current) {
                             codeRef.current.className = codeRef.current.className.replace(/language-\w+/g, 'language-text');
                         }
                     }
                 }
-            }, 300); // Longer delay
+            }, 300);
+
+            return () => clearTimeout(timeoutId);
         }
-    }, [activeArtifact, artifacts, prismLoaded]);
+    }, [activeArtifact, displayedContent, prismLoaded, streamingArtifactId]);
 
     const getLanguageFromType = (artifact) => {
         if (!artifact) return 'text';
@@ -187,7 +342,6 @@ const ArtifactCanvas = ({
                 'md': 'markdown'
             };
             const detected = langMap[artifact.language.toLowerCase()];
-            console.log(`Language detection: ${artifact.language} → ${detected}`);
             return detected || 'text';
         }
 
@@ -224,6 +378,18 @@ const ArtifactCanvas = ({
             artifact.type === 'text/html';
     };
 
+    // Get the content to display - fallback to actual content if streaming fails
+    const getDisplayContent = (artifactId) => {
+        if (!artifactId || !artifacts[artifactId]) return '';
+        // Always show something - prefer displayed content but fallback to actual
+        return displayedContent[artifactId] || artifacts[artifactId].content || '';
+    };
+
+    // Streaming cursor component for artifacts
+    const ArtifactStreamingCursor = () => (
+        <span className="inline-block w-2 h-4 bg-green-400 animate-pulse ml-1"></span>
+    );
+
     return (
         <>
             {(Object.keys(artifacts).length > 0 || showArtifacts) && (
@@ -249,10 +415,17 @@ const ArtifactCanvas = ({
                                     <FileText className="w-4 h-4"/>
                                 )}
                                 <span className="text-sm font-medium">{artifact.title || 'Untitled'}</span>
+                                {/* Show streaming indicator */}
+                                {streamingArtifactId === artifact.id && (
+                                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                                )}
                             </button>
                         ))}
                         <button
-                            onClick={() => setShowArtifacts(false)}
+                            onClick={() => {
+                                stopArtifactStreaming();
+                                setShowArtifacts(false);
+                            }}
                             className="ml-auto p-2 text-slate-400 hover:text-white transition-colors"
                         >
                             <X className="w-4 h-4"/>
@@ -263,13 +436,21 @@ const ArtifactCanvas = ({
                     {activeArtifact && artifacts[activeArtifact] && (
                         <div className="flex-1 overflow-auto relative">
                             {/* Debug info */}
-                            {process.env.NODE_ENV === 'development' && (
-                                <div className="absolute top-20 right-4 z-10 bg-slate-700 text-xs p-2 rounded text-slate-300 max-w-xs">
+                            {process.env.NODE_ENV === 'development' && showDebugInfo && (
+                                <div
+                                    className="absolute top-20 right-4 z-10 bg-slate-700 text-xs p-2 rounded text-slate-300 max-w-xs">
                                     <div>Type: {artifacts[activeArtifact].type}</div>
                                     <div>Language: {artifacts[activeArtifact].language}</div>
-                                    <div>Content Length: {artifacts[activeArtifact].content?.length || 0}</div>
-                                    <div>Should Highlight: {shouldShowSyntaxHighlighting(artifacts[activeArtifact]).toString()}</div>
+                                    <div>Target Length: {artifacts[activeArtifact].content?.length || 0}</div>
+                                    <div>Displayed Length: {getDisplayContent(activeArtifact).length}</div>
+                                    <div>Streaming: {streamingArtifactId === activeArtifact ? 'Yes' : 'No'}</div>
+                                    <div>Stream Index: {artifactCurrentIndexRef.current}</div>
+                                    <div>Should
+                                        Highlight: {shouldShowSyntaxHighlighting(artifacts[activeArtifact]).toString()}</div>
                                     <div>Detected Lang: {getLanguageFromType(artifacts[activeArtifact])}</div>
+                                    <div>Displayed Sample: {getDisplayContent(activeArtifact).substring(0, 20)}...</div>
+                                    <div>Target Sample: {artifacts[activeArtifact].content?.substring(0, 20) || ''}...
+                                    </div>
                                 </div>
                             )}
 
@@ -288,15 +469,20 @@ const ArtifactCanvas = ({
                                     <code
                                         ref={codeRef}
                                         className={`language-${getLanguageFromType(artifacts[activeArtifact])}`}
+                                        key={`${activeArtifact}-${streamingArtifactId === activeArtifact ? 'streaming' : 'static'}`}
                                     >
-                                        {artifacts[activeArtifact].content || (
+                                        {getDisplayContent(activeArtifact) || (
                                             <span className="text-slate-500 italic">Creating artifact...</span>
                                         )}
                                     </code>
+                                    {/* Show streaming cursor outside code element to avoid DOM conflicts */}
+                                    {streamingArtifactId === activeArtifact && (
+                                        <ArtifactStreamingCursor/>
+                                    )}
                                 </pre>
                             ) : artifacts[activeArtifact].type === 'text/html' ? (
                                 <iframe
-                                    srcDoc={artifacts[activeArtifact].content || '<p>Loading...</p>'}
+                                    srcDoc={getDisplayContent(activeArtifact) || '<p>Loading...</p>'}
                                     className="w-full h-full border-0"
                                     sandbox="allow-scripts allow-same-origin"
                                 />
@@ -308,13 +494,21 @@ const ArtifactCanvas = ({
                                         </p>
                                     </div>
                                     <pre className="text-slate-300 font-mono text-xs whitespace-pre-wrap">
-                                        <code>{artifacts[activeArtifact].content || 'Loading...'}</code>
+                                        <code>
+                                            {getDisplayContent(activeArtifact) || 'Loading...'}
+                                            {streamingArtifactId === activeArtifact && (
+                                                <ArtifactStreamingCursor/>
+                                            )}
+                                        </code>
                                     </pre>
                                 </div>
                             ) : (
                                 <div className="p-6 text-slate-300 text-sm h-full overflow-auto whitespace-pre-wrap">
-                                    {artifacts[activeArtifact].content || (
+                                    {getDisplayContent(activeArtifact) || (
                                         <span className="text-slate-500 italic">Creating artifact...</span>
+                                    )}
+                                    {streamingArtifactId === activeArtifact && (
+                                        <ArtifactStreamingCursor/>
                                     )}
                                 </div>
                             )}

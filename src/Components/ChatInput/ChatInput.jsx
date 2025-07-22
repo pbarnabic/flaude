@@ -9,8 +9,15 @@ const ChatInput = ({
                        setInput,
                        apiKey,
                        handleStop,
-                       handleKeyPress,
                    }) => {
+
+    const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+        }
+    };
+
     return (
         <div className="border-t border-slate-200 bg-white/80 backdrop-blur-lg p-4">
             <div className="max-w-4xl mx-auto">

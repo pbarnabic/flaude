@@ -1,5 +1,7 @@
-import {Download, Eye, EyeOff, Key, Menu, Sparkles, Trash2, Upload, Code} from "lucide-react";
 import React from "react";
+import {Download, Eye, EyeOff, Key, Menu, Sparkles, Trash2, Upload, Code, Settings} from "lucide-react";
+import {MODELS} from "../../Constants/Models.js";
+
 
 const Header = ({
                     showApiKey,
@@ -7,15 +9,13 @@ const Header = ({
                     apiKey,
                     setApiKey,
                     handleClear,
-                    fileInputRef,
                     showMobileMenu,
                     setShowMobileMenu,
-                    handleDownload,
-                    // Add these new props
                     artifacts,
                     showArtifacts,
                     setShowArtifacts,
-
+                    setShowSettings,
+                    modelSettings
                 }) => {
 
     return (
@@ -28,6 +28,10 @@ const Header = ({
                     <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                         Claude Clone
                     </h1>
+                    {/* Model indicator */}
+                    <div className="hidden sm:block text-xs bg-slate-100 px-2 py-1 rounded-full text-slate-600">
+                        {MODELS[modelSettings?.model] || 'Unknown Model'}
+                    </div>
                 </div>
 
                 {/* Desktop Controls */}
@@ -49,6 +53,14 @@ const Header = ({
                         </button>
                     </div>
                     <div className="flex gap-1">
+                        {/* Settings button */}
+                        <button
+                            onClick={() => setShowSettings(true)}
+                            className="p-2 hover:bg-slate-100 rounded-lg transition-all hover:shadow-md"
+                            title="Model settings"
+                        >
+                            <Settings className="w-5 h-5 text-slate-600"/>
+                        </button>
                         {/* Artifacts toggle button - only show if artifacts exist */}
                         {Object.keys(artifacts || {}).length > 0 && (
                             <button
@@ -70,20 +82,6 @@ const Header = ({
                         >
                             <Trash2 className="w-5 h-5 text-slate-600"/>
                         </button>
-                        <button
-                            onClick={handleDownload}
-                            className="p-2 hover:bg-slate-100 rounded-lg transition-all hover:shadow-md"
-                            title="Download conversation"
-                        >
-                            <Download className="w-5 h-5 text-slate-600"/>
-                        </button>
-                        <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="p-2 hover:bg-slate-100 rounded-lg transition-all hover:shadow-md"
-                            title="Upload conversation"
-                        >
-                            <Upload className="w-5 h-5 text-slate-600"/>
-                        </button>
                     </div>
                 </div>
 
@@ -99,6 +97,14 @@ const Header = ({
             {/* Mobile Menu */}
             {showMobileMenu && (
                 <div className="md:hidden mt-4 space-y-3 pb-2">
+                    {/* Mobile Model indicator */}
+                    <div className="text-center text-xs bg-slate-100 px-2 py-1 rounded-full text-slate-600">
+                        Current: {modelSettings?.model === 'claude-sonnet-4-20250514' ? 'Sonnet 3.5 (Latest)' :
+                        modelSettings?.model === 'claude-3-5-sonnet-20241022' ? 'Sonnet 3.5 (Oct)' :
+                            modelSettings?.model === 'claude-3-5-haiku-20241022' ? 'Haiku 3.5' :
+                                modelSettings?.model === 'claude-3-opus-20240229' ? 'Opus 3' : 'Sonnet 3.5'}
+                    </div>
+
                     <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-2">
                         <Key className="w-4 h-4 text-slate-500"/>
                         <input
@@ -115,13 +121,26 @@ const Header = ({
                             {showApiKey ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
                         </button>
                     </div>
+
                     <div className="flex gap-2">
+                        {/* Mobile Settings button */}
+                        <button
+                            onClick={() => {
+                                setShowSettings(true);
+                                setShowMobileMenu(false);
+                            }}
+                            className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                            <Settings className="w-4 h-4"/>
+                            <span className="text-sm">Settings</span>
+                        </button>
+
                         {/* Mobile Artifacts button */}
                         {Object.keys(artifacts || {}).length > 0 && (
                             <button
                                 onClick={() => {
                                     setShowArtifacts(!showArtifacts);
-                                    setShowMobileMenu(false); // Close mobile menu when opening artifacts
+                                    setShowMobileMenu(false);
                                 }}
                                 className={`flex-1 py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-2 ${
                                     showArtifacts
@@ -133,26 +152,15 @@ const Header = ({
                                 <span className="text-sm">Artifacts</span>
                             </button>
                         )}
+                    </div>
+
+                    <div className="flex gap-2">
                         <button
                             onClick={handleClear}
                             className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center justify-center gap-2"
                         >
                             <Trash2 className="w-4 h-4"/>
                             <span className="text-sm">Clear</span>
-                        </button>
-                        <button
-                            onClick={handleDownload}
-                            className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center justify-center gap-2"
-                        >
-                            <Download className="w-4 h-4"/>
-                            <span className="text-sm">Download</span>
-                        </button>
-                        <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center justify-center gap-2"
-                        >
-                            <Upload className="w-4 h-4"/>
-                            <span className="text-sm">Upload</span>
                         </button>
                     </div>
                 </div>
