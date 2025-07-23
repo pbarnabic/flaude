@@ -1,11 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Check, Code, Copy, FileText, Play, X } from "lucide-react";
-import {CLOSING_TAG, OPENING_TAG} from "../../Constants/ArtifactDelimiters.jsx";
+import React, {useEffect, useRef, useState} from "react";
+import {Check, Code, Copy, FileText, Play, X} from "lucide-react";
+import {ArtifactParsingUtils} from "../../Utils/ArtifactParsingUtils.js";
 
 const MobileArtifactPanel = ({
                                  apiMessages = [],
                                  streamingContent = '',
-                                 streamingMessageId = null,
                                  showArtifacts,
                                  setShowArtifacts,
                                  activeArtifact,
@@ -14,87 +13,8 @@ const MobileArtifactPanel = ({
     const codeRef = useRef(null);
     const [copied, setCopied] = useState(false);
 
-    // Parse artifacts by extracting complete artifact tags from messages
-    const parseArtifactsFromMessages = () => {
-        const artifacts = {};
-
-        // Helper to extract artifacts from content
-        const extractArtifacts = (content, isStreaming = false) => {
-            const foundArtifacts = {};
-            let pos = 0;
-
-            while (pos < content.length) {
-                const startTag = content.indexOf(OPENING_TAG, pos);
-                if (startTag === -1) break;
-
-                const tagEnd = content.indexOf('>', startTag);
-                if (tagEnd === -1) {
-                    // Incomplete opening tag during streaming
-                    if (isStreaming) break;
-                    else continue;
-                }
-
-                const endTag = content.indexOf(CLOSING_TAG, tagEnd);
-                const openingTag = content.substring(startTag, tagEnd + 1);
-
-                // Extract attributes
-                const idMatch = openingTag.match(/id=["']([^"']+)["']/);
-                const typeMatch = openingTag.match(/type=["']([^"']+)["']/);
-                const languageMatch = openingTag.match(/language=["']([^"']+)["']/);
-                const titleMatch = openingTag.match(/title=["']([^"']+)["']/);
-
-                if (idMatch) {
-                    let artifactContent = '';
-                    let isComplete = true;
-
-                    if (endTag === -1) {
-                        // Incomplete artifact - take content from tag end to end of string
-                        if (isStreaming) {
-                            artifactContent = content.substring(tagEnd + 1);
-                            isComplete = false;
-                        }
-                    } else {
-                        // Complete artifact
-                        artifactContent = content.substring(tagEnd + 1, endTag);
-                        isComplete = true;
-                    }
-
-                    foundArtifacts[idMatch[1]] = {
-                        id: idMatch[1],
-                        type: typeMatch ? typeMatch[1] : 'text/plain',
-                        language: languageMatch ? languageMatch[1] : undefined,
-                        title: titleMatch ? titleMatch[1] : 'Untitled',
-                        content: artifactContent,
-                        version: 1,
-                        timestamp: Date.now(),
-                        isComplete: isComplete
-                    };
-                }
-
-                pos = endTag === -1 ? content.length : endTag + 14;
-            }
-
-            return foundArtifacts;
-        };
-
-        // Process API messages
-        for (const apiMsg of apiMessages) {
-            if (apiMsg.role === 'assistant' && typeof apiMsg.content === 'string') {
-                const messageArtifacts = extractArtifacts(apiMsg.content, false);
-                Object.assign(artifacts, messageArtifacts);
-            }
-        }
-
-        // Process streaming content
-        if (streamingContent) {
-            const streamingArtifacts = extractArtifacts(streamingContent, true);
-            Object.assign(artifacts, streamingArtifacts);
-        }
-
-        return artifacts;
-    };
-
-    const artifacts = parseArtifactsFromMessages();
+    // Use shared parsing utility
+    const artifacts = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
 
     const copyToClipboard = () => {
         if (activeArtifact && artifacts[activeArtifact]) {
@@ -106,7 +26,7 @@ const MobileArtifactPanel = ({
 
     useEffect(() => {
         if (window.Prism && codeRef.current && showArtifacts && activeArtifact && artifacts[activeArtifact]) {
-            const language = getLanguageFromType(artifacts[activeArtifact]);
+            const language = ArtifactParsingUtils.getLanguageFromType(artifacts[activeArtifact]);
             const codeElement = codeRef.current;
             codeElement.className = `language-${language}`;
             window.Prism.highlightElement(codeElement);
@@ -137,42 +57,6 @@ const MobileArtifactPanel = ({
             }
         }
     }, [artifacts, activeArtifact, setActiveArtifact]);
-
-    const getLanguageFromType = (artifact) => {
-        if (!artifact) return 'text';
-        const langMap = {
-            html: 'markup', htm: 'markup', xml: 'markup', svg: 'markup',
-            css: 'css', scss: 'scss', sass: 'sass', less: 'less',
-            javascript: 'javascript', js: 'javascript',
-            typescript: 'typescript', ts: 'typescript',
-            jsx: 'jsx', tsx: 'tsx', react: 'jsx',
-            python: 'python', py: 'python',
-            java: 'java', c: 'c', cpp: 'cpp', 'c++': 'cpp',
-            php: 'php', rb: 'ruby', ruby: 'ruby',
-            json: 'json', yaml: 'yaml', yml: 'yaml',
-            bash: 'bash', shell: 'shell', sh: 'bash',
-            markdown: 'markdown', md: 'markdown'
-        };
-        if (artifact.language && langMap[artifact.language.toLowerCase()]) return langMap[artifact.language.toLowerCase()];
-        if (artifact.type === 'application/vnd.ant.react') return 'jsx';
-        if (artifact.type === 'text/html') return 'markup';
-        if (artifact.type === 'text/css') return 'css';
-        if (artifact.type === 'text/markdown') return 'markdown';
-        if (artifact.type === 'application/json') return 'json';
-        if (artifact.title) {
-            const ext = artifact.title.toLowerCase();
-            for (const key in langMap) if (ext.includes(`.${key}`)) return langMap[key];
-        }
-        return 'text';
-    };
-
-    const shouldShowSyntaxHighlighting = (artifact) => {
-        if (!artifact || !window.Prism) return false;
-        return artifact.type === 'application/vnd.ant.code' ||
-            artifact.language ||
-            artifact.type === 'application/vnd.ant.react' ||
-            artifact.type === 'text/html';
-    };
 
     const VersionIndicator = ({ version }) => (
         <span className="text-xs text-slate-500 ml-2">v{version}</span>
@@ -242,11 +126,11 @@ const MobileArtifactPanel = ({
                             </button>
                         </div>
 
-                        {shouldShowSyntaxHighlighting(artifacts[activeArtifact]) ? (
+                        {ArtifactParsingUtils.shouldShowSyntaxHighlighting(artifacts[activeArtifact]) ? (
                             <pre className="p-4 text-xs font-mono h-full overflow-auto">
                                 <code
                                     ref={codeRef}
-                                    className={`language-${getLanguageFromType(artifacts[activeArtifact])}`}
+                                    className={`language-${ArtifactParsingUtils.getLanguageFromType(artifacts[activeArtifact])}`}
                                     key={`${activeArtifact}-${artifacts[activeArtifact].version}`}
                                 >
                                     {artifacts[activeArtifact].content || ''}
@@ -256,6 +140,7 @@ const MobileArtifactPanel = ({
                             <iframe
                                 srcDoc={artifacts[activeArtifact].content || '<p>Loading...</p>'}
                                 className="w-full h-full border-0"
+                                sandbox="allow-scripts allow-same-origin"
                             />
                         ) : artifacts[activeArtifact].type === 'application/vnd.ant.react' ? (
                             <div className="p-4 text-slate-300 text-xs h-full overflow-auto">

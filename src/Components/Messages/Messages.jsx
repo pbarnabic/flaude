@@ -1,8 +1,8 @@
-import React, { useEffect, useRef } from "react";
-import { Bot, Code, FileText, Package } from "lucide-react";
+import React, {useEffect, useRef} from "react";
+import {Bot, Code, FileText, Package} from "lucide-react";
 import Message from "../Message/Message.jsx";
 import LoadingDots from "../LoadingDots/LoadingDots.jsx";
-import {CLOSING_TAG, OPENING_TAG} from "../../Constants/ArtifactDelimiters.jsx";
+import {ArtifactParsingUtils} from "../../Utils/ArtifactParsingUtils.js";
 
 const Messages = ({
                       apiMessages = [],
@@ -10,9 +10,7 @@ const Messages = ({
                       handleEditSubmit,
                       streamingMessageId = null,
                       streamingContent = '',
-                      streamingCleanContent,
                       streamingToolCalls,
-                      showDebugInfo = false,
                       onArtifactClick
                   }) => {
     const messagesEndRef = useRef(null);
@@ -21,123 +19,8 @@ const Messages = ({
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [apiMessages, streamingContent]);
 
-    // Parse artifacts by extracting complete artifact tags from messages (same as ArtifactCanvas)
-    const parseArtifactsFromMessages = () => {
-        const artifacts = {};
-
-        // Helper to extract artifacts from content
-        const extractArtifacts = (content, isStreaming = false) => {
-            const foundArtifacts = {};
-            let pos = 0;
-
-            while (pos < content.length) {
-                const startTag = content.indexOf(OPENING_TAG, pos);
-                if (startTag === -1) break;
-
-                const tagEnd = content.indexOf('>', startTag);
-                if (tagEnd === -1) {
-                    if (isStreaming) break;
-                    else continue;
-                }
-
-                const endTag = content.indexOf(CLOSING_TAG, tagEnd);
-                const openingTag = content.substring(startTag, tagEnd + 1);
-
-                // Extract attributes
-                const idMatch = openingTag.match(/id=["']([^"']+)["']/);
-                const typeMatch = openingTag.match(/type=["']([^"']+)["']/);
-                const languageMatch = openingTag.match(/language=["']([^"']+)["']/);
-                const titleMatch = openingTag.match(/title=["']([^"']+)["']/);
-
-                if (idMatch) {
-                    let artifactContent = '';
-                    let isComplete = true;
-
-                    if (endTag === -1) {
-                        if (isStreaming) {
-                            artifactContent = content.substring(tagEnd + 1);
-                            isComplete = false;
-                        }
-                    } else {
-                        artifactContent = content.substring(tagEnd + 1, endTag);
-                        isComplete = true;
-                    }
-
-                    foundArtifacts[idMatch[1]] = {
-                        id: idMatch[1],
-                        type: typeMatch ? typeMatch[1] : 'text/plain',
-                        language: languageMatch ? languageMatch[1] : undefined,
-                        title: titleMatch ? titleMatch[1] : 'Untitled',
-                        content: artifactContent,
-                        version: 1,
-                        timestamp: Date.now(),
-                        isComplete: isComplete
-                    };
-                }
-
-                pos = endTag === -1 ? content.length : endTag + 14;
-            }
-
-            return foundArtifacts;
-        };
-
-        // Process API messages
-        for (const apiMsg of apiMessages) {
-            if (apiMsg.role === 'assistant' && typeof apiMsg.content === 'string') {
-                const messageArtifacts = extractArtifacts(apiMsg.content, false);
-                Object.assign(artifacts, messageArtifacts);
-            }
-        }
-
-        // Process streaming content
-        if (streamingContent) {
-            const streamingArtifacts = extractArtifacts(streamingContent, true);
-            Object.assign(artifacts, streamingArtifacts);
-        }
-
-        return artifacts;
-    };
-
-    const artifacts = parseArtifactsFromMessages();
-
-    const parseSegments = (content, isStreaming = false) => {
-        const segments = [];
-        let cursor = 0;
-
-        while (cursor < content.length) {
-            const start = content.indexOf(OPENING_TAG, cursor);
-            if (start === -1) break;
-
-            const tagEnd = content.indexOf(">", start);
-            if (tagEnd === -1) break;
-
-            const end = content.indexOf(CLOSING_TAG, tagEnd);
-            const idMatch = content.slice(start, tagEnd + 1).match(/id=["']([^"']+)["']/);
-            const id = idMatch?.[1];
-
-            if (cursor < start) {
-                const text = content.slice(cursor, start).trim();
-                if (text) segments.push({ type: "text", content: text });
-            }
-
-            if (id) {
-                segments.push({
-                    type: "artifact",
-                    id,
-                    isComplete: end !== -1
-                });
-            }
-
-            cursor = end !== -1 ? end + 14 : content.length;
-        }
-
-        if (cursor < content.length) {
-            const text = content.slice(cursor).trim();
-            if (text) segments.push({ type: "text", content: text });
-        }
-
-        return segments;
-    };
+    // Use shared parsing utility
+    const artifacts = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
 
     const buildDisplayMessages = () => {
         const display = [];
@@ -153,7 +36,7 @@ const Messages = ({
                     sourceMessageId: msg.id
                 });
             } else if (msg.role === "assistant" && typeof msg.content === "string") {
-                const segments = parseSegments(msg.content);
+                const segments = ArtifactParsingUtils.parseSegments(msg.content);
                 for (const segment of segments) {
                     if (segment.type === "text") {
                         display.push({
@@ -178,7 +61,7 @@ const Messages = ({
 
         // Only add streaming content if there's a streaming message
         if (streamingContent && streamingMessageId) {
-            const segments = parseSegments(streamingContent, true);
+            const segments = ArtifactParsingUtils.parseSegments(streamingContent, true);
             for (const segment of segments) {
                 if (segment.type === "text") {
                     display.push({

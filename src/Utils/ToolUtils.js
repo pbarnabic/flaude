@@ -1,100 +1,80 @@
+
 /**
- * Execute a single artifact operation
- * @param {Object} operation - The artifact operation to execute
- * @param {Object} currentArtifacts - Current artifacts state
- * @returns {Object} Updated artifacts state
+ * Generate update tool definitions for existing artifacts
+ * Only generate tools for complete artifacts
  */
-export const executeArtifactOperation = (operation, currentArtifacts) => {
-    const { command, id, type, title, content, language, old_str, new_str } = operation;
-
-    switch (command) {
-        case 'create':
-            return {
-                ...currentArtifacts,
-                [id]: { id, type, language, title, content }
-            };
-
-        case 'update':
-            if (!currentArtifacts[id]) {
-                console.error(`Artifact ${id} not found for update`);
-                return currentArtifacts;
+export const generateArtifactUpdateTools = (artifacts) => {
+    return Object.values(artifacts)
+        .filter(artifact => artifact.isComplete) // Only complete artifacts can be updated
+        .map(artifact => ({
+            type: "custom",
+            name: `update_artifact_${artifact.id}`,
+            description: `Updates the artifact with the id: ${artifact.id}. This can only be used to update ${artifact.id}`,
+            input_schema: {
+                type: "object",
+                properties: {
+                    old_str: {
+                        type: "string",
+                        description: "The exact old string to replace with the new string"
+                    },
+                    new_str: {
+                        type: "string",
+                        description: "The exact new string to replace the old string with"
+                    }
+                },
+                required: ["old_str", "new_str"]
             }
-
-            if (old_str && new_str) {
-                return updateArtifactContent(currentArtifacts, id, old_str, new_str);
-            } else if (content) {
-                return appendArtifactContent(currentArtifacts, id, content);
-            }
-            return currentArtifacts;
-
-        case 'rewrite':
-            return {
-                ...currentArtifacts,
-                [id]: { id, type, language, title, content }
-            };
-
-        default:
-            console.warn('Unknown artifact command:', command);
-            return currentArtifacts;
-    }
+        }));
 };
 
 /**
- * Handle string replacement in artifact content
+ * Process artifact update tool call
  */
-const updateArtifactContent = (artifacts, id, oldStr, newStr) => {
-    const currentContent = artifacts[id].content || '';
+export const processArtifactUpdate = (toolCall, currentArtifacts) => {
+    // Extract artifact ID from tool name (update_artifact_<id>)
+    const artifactId = toolCall.name.replace('update_artifact_', '');
+    console.log(artifactId, currentArtifacts);
 
-    // Try exact match first
-    if (currentContent.includes(oldStr)) {
+    if (!currentArtifacts[artifactId]) {
         return {
-            ...artifacts,
-            [id]: {
-                ...artifacts[id],
-                content: currentContent.replace(oldStr, newStr)
-            }
+            success: false,
+            error: `Artifact ${artifactId} not found`
         };
     }
 
-    // Try trimmed match as fallback
-    const trimmedOld = oldStr.trim();
-    const trimmedNew = newStr.trim();
+    const artifact = currentArtifacts[artifactId];
+    const { old_str, new_str } = toolCall.input;
 
-    if (currentContent.includes(trimmedOld)) {
+    // Check if old_str exists in content
+    if (!artifact.content.includes(old_str)) {
+        // Try trimmed match as fallback
+        const trimmedOld = old_str.trim();
+        if (artifact.content.includes(trimmedOld)) {
+            return {
+                success: true,
+                updatedArtifact: {
+                    ...artifact,
+                    content: artifact.content.replace(trimmedOld, new_str.trim()),
+                    version: artifact.version + 1,
+                    timestamp: Date.now()
+                }
+            };
+        }
+
         return {
-            ...artifacts,
-            [id]: {
-                ...artifacts[id],
-                content: currentContent.replace(trimmedOld, trimmedNew)
-            }
+            success: false,
+            error: `String "${old_str}" not found in artifact content`
         };
     }
 
-    console.error(`Could not find old_str in artifact ${id}, skipping update`);
-    return artifacts;
-};
-
-/**
- * Handle content append to artifact
- */
-const appendArtifactContent = (artifacts, id, content) => {
+    // Perform the replacement
     return {
-        ...artifacts,
-        [id]: {
-            ...artifacts[id],
-            content: (artifacts[id].content || '') + content
+        success: true,
+        updatedArtifact: {
+            ...artifact,
+            content: artifact.content.replace(old_str, new_str),
+            version: artifact.version + 1,
+            timestamp: Date.now()
         }
     };
-};
-
-/**
- * Normalize artifact operations format (handle old vs new format)
- */
-export const normalizeArtifactOperations = (toolInput) => {
-    if (toolInput.artifacts && Array.isArray(toolInput.artifacts)) {
-        return toolInput.artifacts; // New format
-    } else if (toolInput.command) {
-        return [toolInput]; // Old format - wrap in array
-    }
-    return [];
 };

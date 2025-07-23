@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { MODELS } from "../../Constants/Models.js";
-import { DEFAULT_RATE_LIMITS } from "../../Utils/RateLimiter.js";
+import React, {useEffect, useState} from 'react';
+import {MODELS, DEFAULT_RATE_LIMITS} from "../../Constants/Models.js";
 
 const ModelSettings = ({
                            showSettings,
@@ -46,7 +45,8 @@ const ModelSettings = ({
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div
+                className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-slate-200 max-h-[90vh] overflow-y-auto">
                 <div className="p-6">
                     <h2 className="text-xl font-semibold mb-4 text-slate-800">Model Settings</h2>
 
@@ -113,7 +113,7 @@ const ModelSettings = ({
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
                             >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
                             </svg>
                         </button>
 
@@ -196,9 +196,10 @@ const ModelSettings = ({
                                 <div className={`w-10 h-6 rounded-full transition-colors ${
                                     showDebugInfo ? 'bg-blue-600' : 'bg-slate-300'
                                 }`}>
-                                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                                        showDebugInfo ? 'translate-x-4' : 'translate-x-0'
-                                    }`}></div>
+                                    <div
+                                        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                                            showDebugInfo ? 'translate-x-4' : 'translate-x-0'
+                                        }`}></div>
                                 </div>
                             </div>
                             <span className="ml-3 text-sm font-medium text-slate-700">

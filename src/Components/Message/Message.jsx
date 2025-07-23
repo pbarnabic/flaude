@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Bot, User, Edit3, Check, X } from 'lucide-react';
+import React, {useState} from 'react';
+import {Bot, Check, Edit3, User, X} from 'lucide-react';
 
 // Streaming cursor component
 const StreamingCursor = () => (
@@ -7,7 +7,7 @@ const StreamingCursor = () => (
 );
 
 // Simple markdown renderer (keeping the existing one)
-const MarkdownRenderer = ({ content }) => {
+const MarkdownRenderer = ({content}) => {
     const renderMarkdown = (text) => {
         if (!text) return [];
 
@@ -25,7 +25,7 @@ const MarkdownRenderer = ({ content }) => {
                     elements.push(
                         <ol key={`ol-${elements.length}`} className="list-decimal list-inside space-y-1 my-2 ml-4">
                             {listItems.map((item, idx) => (
-                                <li key={idx} dangerouslySetInnerHTML={{ __html: item }} />
+                                <li key={idx} dangerouslySetInnerHTML={{__html: item}}/>
                             ))}
                         </ol>
                     );
@@ -33,7 +33,7 @@ const MarkdownRenderer = ({ content }) => {
                     elements.push(
                         <ul key={`ul-${elements.length}`} className="list-disc list-inside space-y-1 my-2 ml-4">
                             {listItems.map((item, idx) => (
-                                <li key={idx} dangerouslySetInnerHTML={{ __html: item }} />
+                                <li key={idx} dangerouslySetInnerHTML={{__html: item}}/>
                             ))}
                         </ul>
                     );
@@ -57,7 +57,8 @@ const MarkdownRenderer = ({ content }) => {
                     // End of code block
                     elements.push(
                         <div key={`code-${elements.length}`} className="my-3">
-                            <div className="bg-slate-800 rounded-t-lg px-3 py-2 text-xs text-slate-300 font-mono border-b border-slate-700">
+                            <div
+                                className="bg-slate-800 rounded-t-lg px-3 py-2 text-xs text-slate-300 font-mono border-b border-slate-700">
                                 {currentCodeLanguage || 'code'}
                             </div>
                             <pre className="bg-slate-900 rounded-b-lg p-3 overflow-x-auto">
@@ -134,14 +135,14 @@ const MarkdownRenderer = ({ content }) => {
 
             // Empty line
             if (line.trim() === '') {
-                elements.push(<br key={`br-${elements.length}`} />);
+                elements.push(<br key={`br-${elements.length}`}/>);
                 continue;
             }
 
             // Regular paragraph
             elements.push(
                 <p key={`p-${elements.length}`} className="my-1"
-                   dangerouslySetInnerHTML={{ __html: processInlineMarkdown(line) }} />
+                   dangerouslySetInnerHTML={{__html: processInlineMarkdown(line)}}/>
             );
         }
 
@@ -173,7 +174,7 @@ const MarkdownRenderer = ({ content }) => {
 };
 
 // Message component without fake streaming
-const Message = ({ message, onEditSubmit, isLoading }) => {
+const Message = ({message, onEditSubmit, isLoading}) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editContent, setEditContent] = useState(message.content);
 
@@ -205,6 +206,11 @@ const Message = ({ message, onEditSubmit, isLoading }) => {
         }
     };
 
+
+    if (message.role === 'user' && message?.content instanceof Array) { // we don't render tool calls
+        return <></>;
+    }
+
     // User message - editable
     if (message.role === 'user') {
         if (isEditing) {
@@ -226,7 +232,7 @@ const Message = ({ message, onEditSubmit, isLoading }) => {
                                 disabled={isLoading || !editContent.trim()}
                                 className="flex items-center gap-1 px-3 py-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white rounded-lg text-sm transition-colors"
                             >
-                                <Check className="w-4 h-4" />
+                                <Check className="w-4 h-4"/>
                                 Save
                             </button>
                             <button
@@ -234,13 +240,14 @@ const Message = ({ message, onEditSubmit, isLoading }) => {
                                 disabled={isLoading}
                                 className="flex items-center gap-1 px-3 py-1 bg-gray-500 hover:bg-gray-600 disabled:bg-gray-300 text-white rounded-lg text-sm transition-colors"
                             >
-                                <X className="w-4 h-4" />
+                                <X className="w-4 h-4"/>
                                 Cancel
                             </button>
                         </div>
                     </div>
                     <div className="flex-shrink-0">
-                        <div className="w-8 h-8 bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg flex items-center justify-center shadow-md">
+                        <div
+                            className="w-8 h-8 bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg flex items-center justify-center shadow-md">
                             <User className="w-5 h-5 text-white"/>
                         </div>
                     </div>
@@ -250,19 +257,21 @@ const Message = ({ message, onEditSubmit, isLoading }) => {
 
         return (
             <div className="flex gap-3 justify-end group">
-                <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg relative">
-                    <p className="whitespace-pre-wrap text-sm sm:text-base">{message.content}</p>
+                <div
+                    className="max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg relative">
+                    <p className="whitespace-pre-wrap text-sm sm:text-base">{`${message.content}`}</p>
                     <button
                         onClick={handleStartEdit}
                         disabled={isLoading}
                         className="absolute -left-8 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-white hover:bg-gray-100 disabled:bg-gray-200 rounded-full shadow-md text-gray-600"
                         title="Edit message"
                     >
-                        <Edit3 className="w-4 h-4" />
+                        <Edit3 className="w-4 h-4"/>
                     </button>
                 </div>
                 <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg flex items-center justify-center shadow-md">
+                    <div
+                        className="w-8 h-8 bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg flex items-center justify-center shadow-md">
                         <User className="w-5 h-5 text-white"/>
                     </div>
                 </div>
@@ -274,14 +283,16 @@ const Message = ({ message, onEditSubmit, isLoading }) => {
     return (
         <div className="flex gap-3 justify-start">
             <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
+                <div
+                    className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
                     <Bot className="w-5 h-5 text-white"/>
                 </div>
             </div>
-            <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 bg-white border border-slate-200 shadow-sm text-slate-800">
+            <div
+                className="max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 bg-white border border-slate-200 shadow-sm text-slate-800">
                 <div className="text-sm sm:text-base">
-                    <MarkdownRenderer content={message.content} />
-                    {message.isStreaming && <StreamingCursor />}
+                    <MarkdownRenderer content={message.content}/>
+                    {message.isStreaming && <StreamingCursor/>}
                 </div>
                 {message.toolCalls && message.toolCalls.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-slate-200">
