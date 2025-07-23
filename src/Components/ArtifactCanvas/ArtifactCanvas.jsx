@@ -34,30 +34,41 @@ const ArtifactCanvas = ({
         }
     }, [activeArtifact, artifacts]);
 
-    // Auto-select newest artifact when artifacts change, prioritizing incomplete ones
+    // Simple and robust auto-selection logic
     useEffect(() => {
         const artifactEntries = Object.entries(artifacts);
-        if (artifactEntries.length > 0) {
-            // First check for incomplete artifacts (currently being written)
-            const incompleteArtifact = artifactEntries.find(([id, artifact]) => !artifact.isComplete);
+        if (artifactEntries.length === 0) return;
 
-            if (incompleteArtifact) {
-                // Switch to the artifact being written
-                if (activeArtifact !== incompleteArtifact[0]) {
-                    setActiveArtifact(incompleteArtifact[0]);
-                }
-            } else {
-                // No incomplete artifacts, select newest complete one
-                artifactEntries.sort((a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
-                const newestId = artifactEntries[artifactEntries.length - 1][0];
+        // Check if we're currently streaming and if there's an incomplete artifact in the streaming content
+        const isCurrentlyStreaming = streamingContent && streamingContent.length > 0;
+        let activeStreamingArtifact = null;
 
-                // If no artifact is selected or the current selection doesn't exist, select the newest
-                if (!activeArtifact || !artifacts[activeArtifact]) {
-                    setActiveArtifact(newestId);
-                }
+        if (isCurrentlyStreaming) {
+            // Only look for incomplete artifacts in the current streaming content
+            const streamingArtifacts = ArtifactParsingUtils.parseArtifactsFromMessages([], streamingContent);
+            const incompleteStreamingArtifact = Object.entries(streamingArtifacts)
+                .find(([id, artifact]) => !artifact.isComplete);
+
+            if (incompleteStreamingArtifact) {
+                activeStreamingArtifact = incompleteStreamingArtifact[0];
             }
         }
-    }, [artifacts, activeArtifact, setActiveArtifact]);
+
+        // Auto-switch logic:
+        if (activeStreamingArtifact) {
+            // There's an artifact currently being streamed - switch to it
+            if (activeArtifact !== activeStreamingArtifact) {
+                setActiveArtifact(activeStreamingArtifact);
+            }
+        } else if (!activeArtifact || !artifacts[activeArtifact]) {
+            // No active streaming artifact, and either no selection or invalid selection
+            // Select the newest complete artifact
+            artifactEntries.sort((a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
+            const newestId = artifactEntries[artifactEntries.length - 1][0];
+            setActiveArtifact(newestId);
+        }
+        // In all other cases, respect the current selection and don't change anything
+    }, [artifacts, activeArtifact, setActiveArtifact, streamingContent]);
 
     const VersionIndicator = ({version}) => (
         <span className="text-xs text-slate-500 ml-2">v{version}</span>
@@ -122,10 +133,7 @@ const ArtifactCanvas = ({
                                     <div>Version: {artifacts[activeArtifact].version}</div>
                                     <div>Complete: {artifacts[activeArtifact].isComplete ? 'Yes' : 'No'}</div>
                                     <div>Content Length: {artifacts[activeArtifact].content?.length || 0}</div>
-                                    <div>Should
-                                        Highlight: {ArtifactParsingUtils.shouldShowSyntaxHighlighting(artifacts[activeArtifact]).toString()}</div>
-                                    <div>Detected
-                                        Lang: {ArtifactParsingUtils.getLanguageFromType(artifacts[activeArtifact])}</div>
+                                    <div>Streaming: {streamingContent ? 'Yes' : 'No'}</div>
                                 </div>
                             )}
 

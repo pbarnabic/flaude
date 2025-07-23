@@ -1,4 +1,3 @@
-
 import {CLOSING_TAG, OPENING_TAG} from "../Constants/ArtifactDelimiters.jsx";
 
 /**
@@ -45,10 +44,9 @@ export const ArtifactParsingUtils = {
 
                     if (endTag === -1) {
                         // Incomplete artifact - take content from tag end to end of string
-                        if (isStreaming) {
-                            artifactContent = content.substring(tagEnd + 1);
-                            isComplete = false;
-                        }
+                        // This now handles both streaming AND cut-off messages
+                        artifactContent = content.substring(tagEnd + 1);
+                        isComplete = false;
                     } else {
                         // Complete artifact
                         artifactContent = content.substring(tagEnd + 1, endTag);

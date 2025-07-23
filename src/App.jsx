@@ -29,6 +29,7 @@ const ClaudeClone = () => {
     const [activeArtifact, setActiveArtifact] = useState(null);
     const [showArtifacts, setShowArtifacts] = useState(false);
     const [showMobileMenu, setShowMobileMenu] = useState(false);
+    const [userSelectedArtifact, setUserSelectedArtifact] = useState(null);
 
     // Rate Limiting UI State
     const [isWaiting, setIsWaiting] = useState(false);
@@ -343,6 +344,7 @@ const ClaudeClone = () => {
                     onArtifactClick={(artifactId) => {
                         setActiveArtifact(artifactId);
                         setShowArtifacts(true);
+                        setUserSelectedArtifact(artifactId);
                     }}
                 />
 
@@ -379,6 +381,8 @@ const ClaudeClone = () => {
                 activeArtifact={activeArtifact}
                 setActiveArtifact={setActiveArtifact}
                 showDebugInfo={showDebugInfo}
+                userSelectedArtifact={userSelectedArtifact}
+                setUserSelectedArtifact={setUserSelectedArtifact}
             />
 
             <MobileArtifactsViewer
@@ -386,6 +390,8 @@ const ClaudeClone = () => {
                 streamingContent={streamingContent}
                 showArtifacts={showArtifacts}
                 setShowArtifacts={setShowArtifacts}
+                userSelectedArtifact={userSelectedArtifact}
+                setUserSelectedArtifact={setUserSelectedArtifact}
             />
 
             {showArtifacts && (
@@ -396,6 +402,8 @@ const ClaudeClone = () => {
                     setShowArtifacts={setShowArtifacts}
                     activeArtifact={activeArtifact}
                     setActiveArtifact={setActiveArtifact}
+                    userSelectedArtifact={userSelectedArtifact}
+                    setUserSelectedArtifact={setUserSelectedArtifact}
                 />
             )}
 
