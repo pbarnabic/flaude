@@ -10,6 +10,21 @@ export const streamClaudeAPI = async (messages, apiKey, modelSettings, existingA
     // Combine base tools with artifact update tools
     const allTools = [...TOOLS_V2, ...artifactUpdateTools];
 
+    const body = {
+        model: modelSettings.model,
+        max_tokens: modelSettings.maxTokens,
+        temperature: modelSettings.temperature,
+        messages: messages,
+        system: SYSTEM_MESSAGE,
+        // tool_choice: {type: 'auto'},
+        stream: true  // Enable streaming
+    };
+
+    if (allTools?.length) {
+        body.tools = allTools;
+        body.tool_choice = {type: 'auto'};
+    }
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -18,16 +33,7 @@ export const streamClaudeAPI = async (messages, apiKey, modelSettings, existingA
             'anthropic-version': '2023-06-01',
             'anthropic-dangerous-direct-browser-access': 'true'
         },
-        body: JSON.stringify({
-            model: modelSettings.model,
-            max_tokens: modelSettings.maxTokens,
-            temperature: modelSettings.temperature,
-            messages: messages,
-            system: SYSTEM_MESSAGE,
-            tools: allTools,
-            tool_choice: {type: 'auto'},
-            stream: true  // Enable streaming
-        })
+        body: JSON.stringify(body)
     });
 
     if (!response.ok) {

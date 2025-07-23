@@ -123,15 +123,15 @@ export const TOOLS_V2 = [
     //         "title": "ArtifactsInput"
     //     }
     // },
-    {
-        name: "repl",
-        description: "Execute JavaScript code in a sandboxed environment",
-        input_schema: {
-            type: "object",
-            properties: {
-                code: { type: "string" }
-            },
-            required: ["code"]
-        }
-    }
+    // {
+    //     name: "repl",
+    //     description: "Execute JavaScript code in a sandboxed environment",
+    //     input_schema: {
+    //         type: "object",
+    //         properties: {
+    //             code: { type: "string" }
+    //         },
+    //         required: ["code"]
+    //     }
+    // }
 ];

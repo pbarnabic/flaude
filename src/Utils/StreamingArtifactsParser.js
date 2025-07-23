@@ -1,3 +1,5 @@
+import {CLOSING_TAG, OPENING_TAG} from "../Constants/ArtifactDelimiters.jsx";
+
 export class StreamingArtifactParser {
     constructor() {
         this.reset();
@@ -8,9 +10,39 @@ export class StreamingArtifactParser {
         this.artifacts = [];
         this.inArtifact = false;
         this.currentArtifact = null;
+        this.incompleteArtifactId = null; // Track artifact that hit max tokens
     }
 
-    parseChunk(chunk) {
+    // Check if we should continue an incomplete artifact
+    checkForContinuation(previousMessages) {
+        if (!previousMessages || previousMessages.length === 0) return null;
+
+        // Look at the last assistant message
+        const lastMessage = previousMessages[previousMessages.length - 1];
+        if (lastMessage.role !== 'assistant') return null;
+
+        // Check if the last message had an incomplete artifact
+        // This would be set by the main conversation handler
+        if (lastMessage.incompleteArtifactId) {
+            return lastMessage.incompleteArtifactId;
+        }
+
+        return null;
+    }
+
+    parseChunk(chunk, continuationArtifactId = null) {
+        // If we're continuing an incomplete artifact from a previous message
+        if (continuationArtifactId && !this.inArtifact && !this.currentArtifact) {
+            // Start in artifact mode without looking for opening tag
+            this.inArtifact = true;
+            this.currentArtifact = {
+                id: continuationArtifactId,
+                isContinuation: true,
+                content: '',
+                isComplete: false
+            };
+        }
+
         this.buffer += chunk;
 
         const updates = {
@@ -23,16 +55,16 @@ export class StreamingArtifactParser {
 
         while (position < this.buffer.length) {
             if (!this.inArtifact) {
-                // Find <LLMArtifact
-                const artifactStart = this.buffer.indexOf('<LLMArtifact', position);
+                // Find Opening Artifact Tag
+                const artifactStart = this.buffer.indexOf(OPENING_TAG, position);
 
                 if (artifactStart === -1) {
                     // No artifact start found
-                    // Check if buffer ends with partial <LLMArtifact
+                    // Check if buffer ends with partial OPENING_TAG
                     let keepInBuffer = 0;
                     const bufferEnd = this.buffer.substring(position);
                     for (let i = 1; i <= Math.min(13, bufferEnd.length); i++) {
-                        if ('<LLMArtifact'.startsWith(bufferEnd.substring(bufferEnd.length - i))) {
+                        if (OPENING_TAG.startsWith(bufferEnd.substring(bufferEnd.length - i))) {
                             keepInBuffer = i;
                             break;
                         }
@@ -55,7 +87,7 @@ export class StreamingArtifactParser {
                     updates.cleanedTextDelta += this.buffer.substring(position, artifactStart);
                 }
 
-                // Find the > after <LLMArtifact
+                // Find the > after Opening Tag
                 const tagEnd = this.buffer.indexOf('>', artifactStart);
                 if (tagEnd === -1) {
                     // No > yet, save for next chunk
@@ -78,7 +110,8 @@ export class StreamingArtifactParser {
                     language: attrs.language,
                     title: attrs.title || 'Untitled',
                     content: '',
-                    isComplete: false
+                    isComplete: false,
+                    isContinuation: false
                 };
 
                 this.inArtifact = true;
@@ -87,7 +120,7 @@ export class StreamingArtifactParser {
 
             } else {
                 // Find </LLMArtifact>
-                const endTag = '</LLMArtifact>';
+                const endTag = CLOSING_TAG;
                 const endIndex = this.buffer.indexOf(endTag, position);
 
                 if (endIndex === -1) {
@@ -110,7 +143,8 @@ export class StreamingArtifactParser {
                             updates.activeArtifactUpdate = {
                                 id: this.currentArtifact.id,
                                 content: this.currentArtifact.content,
-                                isComplete: false
+                                isComplete: false,
+                                isContinuation: this.currentArtifact.isContinuation
                             };
                         }
                         this.buffer = bufferEnd.substring(bufferEnd.length - keepInBuffer);
@@ -120,7 +154,8 @@ export class StreamingArtifactParser {
                         updates.activeArtifactUpdate = {
                             id: this.currentArtifact.id,
                             content: this.currentArtifact.content,
-                            isComplete: false
+                            isComplete: false,
+                            isContinuation: this.currentArtifact.isContinuation
                         };
                         this.buffer = '';
                     }
@@ -135,7 +170,8 @@ export class StreamingArtifactParser {
                 updates.activeArtifactUpdate = {
                     id: this.currentArtifact.id,
                     content: this.currentArtifact.content,
-                    isComplete: true
+                    isComplete: true,
+                    isContinuation: this.currentArtifact.isContinuation
                 };
 
                 this.artifacts.push({ ...this.currentArtifact });
@@ -155,22 +191,31 @@ export class StreamingArtifactParser {
         const updates = {
             artifacts: [],
             cleanedTextDelta: '',
-            activeArtifactUpdate: null
+            activeArtifactUpdate: null,
+            incompleteArtifactId: null
         };
 
         if (this.buffer) {
             if (this.inArtifact && this.currentArtifact) {
+                // Artifact was incomplete (likely hit max tokens)
                 this.currentArtifact.content += this.buffer;
                 this.currentArtifact.isComplete = false;
                 updates.activeArtifactUpdate = {
                     id: this.currentArtifact.id,
                     content: this.currentArtifact.content,
-                    isComplete: false
+                    isComplete: false,
+                    isContinuation: this.currentArtifact.isContinuation
                 };
+                updates.incompleteArtifactId = this.currentArtifact.id;
                 this.artifacts.push({ ...this.currentArtifact });
             } else {
                 updates.cleanedTextDelta = this.buffer;
             }
+        }
+
+        // If we're still in an artifact, it means we hit max tokens
+        if (this.inArtifact && this.currentArtifact) {
+            updates.incompleteArtifactId = this.currentArtifact.id;
         }
 
         this.reset();

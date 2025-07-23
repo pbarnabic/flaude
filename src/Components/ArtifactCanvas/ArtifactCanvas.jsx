@@ -1,8 +1,11 @@
-import {Check, Code, Copy, FileText, Play, X} from "lucide-react";
-import React, {useEffect, useRef, useState} from "react";
+import { Check, Code, Copy, FileText, Play, X } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import {CLOSING_TAG, OPENING_TAG} from "../../Constants/ArtifactDelimiters.jsx";
 
 const ArtifactCanvas = ({
-                            artifacts,
+                            apiMessages = [],
+                            streamingContent = '',
+                            streamingMessageId = null,
                             showArtifacts,
                             setShowArtifacts,
                             activeArtifact,
@@ -10,8 +13,89 @@ const ArtifactCanvas = ({
                             showDebugInfo = false,
                         }) => {
     const codeRef = useRef(null);
-    const [prismLoaded, setPrismLoaded] = useState(false);
     const [copied, setCopied] = useState(false);
+
+    // Parse artifacts by extracting complete artifact tags from messages
+    const parseArtifactsFromMessages = () => {
+        const artifacts = {};
+
+        // Helper to extract artifacts from content
+        const extractArtifacts = (content, isStreaming = false) => {
+            const foundArtifacts = {};
+            let pos = 0;
+
+            while (pos < content.length) {
+                const startTag = content.indexOf(OPENING_TAG, pos);
+                if (startTag === -1) break;
+
+                const tagEnd = content.indexOf('>', startTag);
+                if (tagEnd === -1) {
+                    // Incomplete opening tag during streaming
+                    if (isStreaming) break;
+                    else continue;
+                }
+
+                const endTag = content.indexOf(CLOSING_TAG, tagEnd);
+                const openingTag = content.substring(startTag, tagEnd + 1);
+
+                // Extract attributes
+                const idMatch = openingTag.match(/id=["']([^"']+)["']/);
+                const typeMatch = openingTag.match(/type=["']([^"']+)["']/);
+                const languageMatch = openingTag.match(/language=["']([^"']+)["']/);
+                const titleMatch = openingTag.match(/title=["']([^"']+)["']/);
+
+                if (idMatch) {
+                    let artifactContent = '';
+                    let isComplete = true;
+
+                    if (endTag === -1) {
+                        // Incomplete artifact - take content from tag end to end of string
+                        if (isStreaming) {
+                            artifactContent = content.substring(tagEnd + 1);
+                            isComplete = false;
+                        }
+                    } else {
+                        // Complete artifact
+                        artifactContent = content.substring(tagEnd + 1, endTag);
+                        isComplete = true;
+                    }
+
+                    foundArtifacts[idMatch[1]] = {
+                        id: idMatch[1],
+                        type: typeMatch ? typeMatch[1] : 'text/plain',
+                        language: languageMatch ? languageMatch[1] : undefined,
+                        title: titleMatch ? titleMatch[1] : 'Untitled',
+                        content: artifactContent,
+                        version: 1,
+                        timestamp: Date.now(),
+                        isComplete: isComplete
+                    };
+                }
+
+                pos = endTag === -1 ? content.length : endTag + 14;
+            }
+
+            return foundArtifacts;
+        };
+
+        // Process API messages
+        for (const apiMsg of apiMessages) {
+            if (apiMsg.role === 'assistant' && typeof apiMsg.content === 'string') {
+                const messageArtifacts = extractArtifacts(apiMsg.content, false);
+                Object.assign(artifacts, messageArtifacts);
+            }
+        }
+
+        // Process streaming content
+        if (streamingContent) {
+            const streamingArtifacts = extractArtifacts(streamingContent, true);
+            Object.assign(artifacts, streamingArtifacts);
+        }
+
+        return artifacts;
+    };
+
+    const artifacts = parseArtifactsFromMessages();
 
     const copyToClipboard = () => {
         if (activeArtifact && artifacts[activeArtifact]) {
@@ -21,227 +105,80 @@ const ArtifactCanvas = ({
         }
     };
 
-    // Load Prism.js properly with sequential loading
     useEffect(() => {
-        const loadPrism = async () => {
-            // Check if already loaded
-            if (window.Prism && prismLoaded) return;
-
-            try {
-                // Load CSS first
-                if (!document.querySelector('link[href*="prism-tomorrow"]')) {
-                    const cssLink = document.createElement('link');
-                    cssLink.rel = 'stylesheet';
-                    cssLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css';
-                    document.head.appendChild(cssLink);
-                }
-
-                // Load Prism core
-                if (!window.Prism) {
-                    await new Promise((resolve, reject) => {
-                        const script = document.createElement('script');
-                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js';
-                        script.onload = resolve;
-                        script.onerror = reject;
-                        document.head.appendChild(script);
-                    });
-                }
-
-                // Ensure Prism is ready and has basic structure
-                if (!window.Prism || !window.Prism.languages) {
-                    return;
-                }
-
-                // Load essential languages sequentially to avoid race conditions
-                const essentialLanguages = [
-                    'prism-markup.min.js',      // HTML, XML, SVG
-                    'prism-css.min.js',         // CSS
-                    'prism-clike.min.js',       // Base for many C-like languages
-                    'prism-javascript.min.js'   // JavaScript
-                ];
-
-                for (const lang of essentialLanguages) {
-                    await new Promise((resolve) => {
-                        const script = document.createElement('script');
-                        script.src = `https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/${lang}`;
-                        script.onload = () => {
-                            resolve();
-                        };
-                        script.onerror = () => {
-                            resolve(); // Continue even if one fails
-                        };
-                        document.head.appendChild(script);
-                    });
-                }
-
-                // Wait a moment for essential languages to fully initialize
-                await new Promise(resolve => setTimeout(resolve, 200));
-
-                // Load additional languages sequentially with proper dependencies
-                const additionalLanguages = [
-                    'prism-typescript.min.js',  // Depends on javascript
-                    'prism-jsx.min.js',         // Depends on markup + javascript
-                    'prism-tsx.min.js',         // Depends on typescript + jsx
-                    'prism-python.min.js',      // Independent
-                    'prism-json.min.js',        // Independent
-                    'prism-yaml.min.js',        // Independent
-                    'prism-bash.min.js',        // Independent
-                    'prism-markdown.min.js',    // Depends on markup
-                    'prism-java.min.js',        // Depends on clike
-                    'prism-c.min.js',           // Depends on clike
-                    'prism-cpp.min.js'          // Depends on c
-                ];
-
-                // Load additional languages sequentially with delays
-                for (let i = 0; i < additionalLanguages.length; i++) {
-                    const lang = additionalLanguages[i];
-                    await new Promise(resolve => {
-                        setTimeout(() => {
-                            const script = document.createElement('script');
-                            script.src = `https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/${lang}`;
-                            script.onload = () => {
-                                resolve();
-                            };
-                            script.onerror = () => {
-                                resolve();
-                            };
-                            document.head.appendChild(script);
-                        }, i * 100); // Stagger loading
-                    });
-                }
-
-                setPrismLoaded(true);
-
-            } catch (error) {
-                // Silent error handling
-            }
-        };
-
-        loadPrism();
-    }, []);
-
-    // Highlight code when content changes
-    useEffect(() => {
-        if (prismLoaded && window.Prism && codeRef.current && activeArtifact && artifacts[activeArtifact]) {
-            // Wait longer to ensure all dependencies are loaded
-            const timeoutId = setTimeout(() => {
-                if (window.Prism.highlightElement && codeRef.current) {
-                    try {
-                        const language = getLanguageFromType(artifacts[activeArtifact]);
-
-                        // Clear any existing Prism classes and content to avoid conflicts
-                        const codeElement = codeRef.current;
-                        codeElement.className = `language-${language}`;
-
-                        // Remove any existing Prism-generated elements
-                        const existingHighlights = codeElement.querySelectorAll('.token');
-                        existingHighlights.forEach(el => {
-                            if (el.parentNode === codeElement) {
-                                el.replaceWith(document.createTextNode(el.textContent || ''));
-                            }
-                        });
-
-                        // Check if the language is actually available
-                        if (language !== 'text' && !window.Prism.languages[language]) {
-                            codeElement.className = 'language-text';
-                        }
-
-                        window.Prism.highlightElement(codeElement);
-                    } catch (error) {
-                        // Clear any existing highlighting classes on error
-                        if (codeRef.current) {
-                            codeRef.current.className = codeRef.current.className.replace(/language-\w+/g, 'language-text');
-                        }
-                    }
-                }
-            }, 300);
-
-            return () => clearTimeout(timeoutId);
+        if (window.Prism && codeRef.current && activeArtifact && artifacts[activeArtifact]) {
+            const language = getLanguageFromType(artifacts[activeArtifact]);
+            const codeElement = codeRef.current;
+            codeElement.className = `language-${language}`;
+            window.Prism.highlightElement(codeElement);
         }
-    }, [activeArtifact, artifacts, prismLoaded]);
+    }, [activeArtifact, artifacts]);
+
+    // Auto-select newest artifact when artifacts change, prioritizing incomplete ones
+    useEffect(() => {
+        const artifactEntries = Object.entries(artifacts);
+        if (artifactEntries.length > 0) {
+            // First check for incomplete artifacts (currently being written)
+            const incompleteArtifact = artifactEntries.find(([id, artifact]) => !artifact.isComplete);
+
+            if (incompleteArtifact) {
+                // Switch to the artifact being written
+                if (activeArtifact !== incompleteArtifact[0]) {
+                    setActiveArtifact(incompleteArtifact[0]);
+                }
+            } else {
+                // No incomplete artifacts, select newest complete one
+                artifactEntries.sort((a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
+                const newestId = artifactEntries[artifactEntries.length - 1][0];
+
+                // If no artifact is selected or the current selection doesn't exist, select the newest
+                if (!activeArtifact || !artifacts[activeArtifact]) {
+                    setActiveArtifact(newestId);
+                }
+            }
+        }
+    }, [artifacts, activeArtifact, setActiveArtifact]);
 
     const getLanguageFromType = (artifact) => {
         if (!artifact) return 'text';
-
-        // Enhanced language mapping with more specific detection
-        if (artifact.language) {
-            const langMap = {
-                'html': 'markup',
-                'htm': 'markup',
-                'xml': 'markup',
-                'svg': 'markup',
-                'css': 'css',
-                'scss': 'scss',
-                'sass': 'sass',
-                'less': 'less',
-                'javascript': 'javascript',
-                'js': 'javascript',
-                'typescript': 'typescript',
-                'ts': 'typescript',
-                'jsx': 'jsx',
-                'tsx': 'tsx',
-                'react': 'jsx',
-                'python': 'python',
-                'py': 'python',
-                'java': 'java',
-                'c': 'c',
-                'cpp': 'cpp',
-                'c++': 'cpp',
-                'php': 'php',
-                'rb': 'ruby',
-                'ruby': 'ruby',
-                'json': 'json',
-                'yaml': 'yaml',
-                'yml': 'yaml',
-                'bash': 'bash',
-                'shell': 'bash',
-                'sh': 'bash',
-                'markdown': 'markdown',
-                'md': 'markdown'
-            };
-            const detected = langMap[artifact.language.toLowerCase()];
-            return detected || 'text';
-        }
-
-        // Enhanced type detection
+        const langMap = {
+            html: 'markup', htm: 'markup', xml: 'markup', svg: 'markup',
+            css: 'css', scss: 'scss', sass: 'sass', less: 'less',
+            javascript: 'javascript', js: 'javascript',
+            typescript: 'typescript', ts: 'typescript',
+            jsx: 'jsx', tsx: 'tsx', react: 'jsx',
+            python: 'python', py: 'python',
+            java: 'java', c: 'c', cpp: 'cpp', 'c++': 'cpp',
+            php: 'php', rb: 'ruby', ruby: 'ruby',
+            json: 'json', yaml: 'yaml', yml: 'yaml',
+            bash: 'bash', shell: 'bash', sh: 'bash',
+            markdown: 'markdown', md: 'markdown'
+        };
+        if (artifact.language && langMap[artifact.language.toLowerCase()]) return langMap[artifact.language.toLowerCase()];
         if (artifact.type === 'application/vnd.ant.react') return 'jsx';
         if (artifact.type === 'text/html') return 'markup';
         if (artifact.type === 'text/css') return 'css';
         if (artifact.type === 'text/markdown') return 'markdown';
         if (artifact.type === 'application/json') return 'json';
-
-        // Try to detect from title/filename
         if (artifact.title) {
-            const title = artifact.title.toLowerCase();
-            if (title.includes('.html') || title.includes('.htm')) return 'markup';
-            if (title.includes('.css')) return 'css';
-            if (title.includes('.js')) return 'javascript';
-            if (title.includes('.jsx')) return 'jsx';
-            if (title.includes('.ts')) return 'typescript';
-            if (title.includes('.tsx')) return 'tsx';
-            if (title.includes('.py')) return 'python';
-            if (title.includes('.java')) return 'java';
-            if (title.includes('.json')) return 'json';
-            if (title.includes('.md')) return 'markdown';
+            const ext = artifact.title.toLowerCase();
+            for (const key in langMap) if (ext.includes(`.${key}`)) return langMap[key];
         }
-
         return 'text';
     };
 
     const shouldShowSyntaxHighlighting = (artifact) => {
-        if (!artifact || !prismLoaded) return false;
+        if (!artifact || !window.Prism) return false;
         return artifact.type === 'application/vnd.ant.code' ||
             artifact.language ||
             artifact.type === 'application/vnd.ant.react' ||
             artifact.type === 'text/html';
     };
 
-    // Version indicator component
     const VersionIndicator = ({ version }) => (
         <span className="text-xs text-slate-500 ml-2">v{version}</span>
     );
 
-    // Status indicator for incomplete artifacts
     const StatusIndicator = ({ isComplete }) => {
         if (isComplete) return null;
         return (

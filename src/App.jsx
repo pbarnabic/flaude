@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useRef} from 'react';
 import MobileArtifactPanel from "./Components/MobileArtifactPanel/MobileArtifactPanel.jsx";
 import MobileArtifactsViewer from "./Components/MobileArtifactsViewer/MobileArtifactsViewer.jsx";
 import ArtifactCanvas from "./Components/ArtifactCanvas/ArtifactCanvas.jsx";
@@ -9,17 +9,36 @@ import ModelSettings from "./Components/ModelSettings/ModelSettings.jsx";
 import {executeREPL} from "./Utils/Repl.js";
 import {API_KEY} from "./Constants/ApiKey.js";
 import {streamClaudeAPI} from "./Requests/StreamingAnthropicRequests.js";
-import {buildApiMessages} from "./Utils/ConversationUtils.js";
-import {processArtifactUpdate, handleArtifactRewrite} from "./Utils/ArtifactParser.js";
+import {processArtifactUpdate} from "./Utils/ArtifactParser.js";
 import {StreamingArtifactParser} from "./Utils/StreamingArtifactsParser.js";
 import {rateLimiter, estimateTokens} from "./Utils/RateLimiter.js";
+import {OPENING_TAG} from "./Constants/ArtifactDelimiters.jsx";
 
 const ClaudeClone = () => {
-    const [messages, setMessages] = useState([]);
+    // Single source of truth - API messages
+    const [apiMessages, setApiMessages] = useState([]);
+
+    // Artifacts state
+    const [artifacts, setArtifacts] = useState({});
+
+    // Track if last message hit max tokens
+    const [lastMessageHitMaxTokens, setLastMessageHitMaxTokens] = useState(false);
+    const incompleteArtifactIdRef = useRef(null);
+
+    // Streaming state
+    const [streamingContent, setStreamingContent] = useState('');
+    const [streamingCleanContent, setStreamingCleanContent] = useState('');
+    const [streamingToolCalls, setStreamingToolCalls] = useState([]);
+    const [streamingMessageId, setStreamingMessageId] = useState(null);
+    const streamingParserRef = useRef(null);
+    const streamingArtifactsRef = useRef({});
+
+    // UI State
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [artifacts, setArtifacts] = useState({});
     const [activeArtifact, setActiveArtifact] = useState(null);
+
+    // Settings and UI State
     const [apiKey, setApiKey] = useState(API_KEY);
     const [showApiKey, setShowApiKey] = useState(false);
     const [showArtifacts, setShowArtifacts] = useState(false);
@@ -27,16 +46,83 @@ const ClaudeClone = () => {
     const [showSettings, setShowSettings] = useState(false);
     const [showDebugInfo, setShowDebugInfo] = useState(false);
     const [modelSettings, setModelSettings] = useState({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-3-5-haiku-20241022',
         temperature: 1.0,
-        maxTokens: 4096
+        maxTokens: 1000
     });
     const [rateLimits, setRateLimits] = useState({});
     const [isWaiting, setIsWaiting] = useState(false);
     const [waitMessage, setWaitMessage] = useState('');
 
-    // Streaming state
-    const [streamingMessageId, setStreamingMessageId] = useState(null);
+    // Build display messages from API messages
+    const buildDisplayMessages = () => {
+        const messages = [];
+        let messageIdCounter = 1;
+
+        for (let i = 0; i < apiMessages.length; i++) {
+            const apiMsg = apiMessages[i];
+
+            if (apiMsg.role === 'user') {
+                if (typeof apiMsg.content === 'string') {
+                    messages.push({
+                        id: messageIdCounter++,
+                        role: 'user',
+                        content: apiMsg.content,
+                        apiIndex: i
+                    });
+                } else if (Array.isArray(apiMsg.content)) {
+                    // Tool results - don't display
+                    continue;
+                }
+            } else if (apiMsg.role === 'assistant') {
+                if (typeof apiMsg.content === 'string') {
+                    // Parse to get clean content
+                    const parser = new StreamingArtifactParser();
+                    const result = parser.parseChunk(apiMsg.content);
+                    const finalResult = parser.finalize();
+                    const cleanContent = result.cleanedTextDelta + (finalResult.cleanedTextDelta || '');
+
+                    messages.push({
+                        id: messageIdCounter++,
+                        role: 'assistant',
+                        content: cleanContent,
+                        toolCalls: [],
+                        apiIndex: i
+                    });
+                } else if (Array.isArray(apiMsg.content)) {
+                    // Tool calls
+                    const toolCalls = apiMsg.content
+                        .filter(block => block.type === 'tool_use')
+                        .map(block => ({
+                            id: block.id,
+                            name: block.name,
+                            input: block.input
+                        }));
+
+                    messages.push({
+                        id: messageIdCounter++,
+                        role: 'assistant',
+                        content: '',
+                        toolCalls: toolCalls,
+                        apiIndex: i
+                    });
+                }
+            }
+        }
+
+        // Add streaming message if present
+        if (streamingContent || streamingToolCalls.length > 0) {
+            messages.push({
+                id: streamingMessageId,
+                role: 'assistant',
+                content: streamingCleanContent,
+                toolCalls: streamingToolCalls,
+                isStreaming: true
+            });
+        }
+
+        return messages;
+    };
 
     /**
      * Process REPL tool calls
@@ -55,248 +141,252 @@ const ClaudeClone = () => {
      * Process artifact update tool calls
      */
     const processArtifactUpdateTool = (toolCall, currentArtifacts) => {
-        console.log('Processing artifact update tool call:', toolCall);
-
         const result = processArtifactUpdate(toolCall, currentArtifacts);
 
         if (result.success) {
-            // Update the artifact with new version
-            const updatedArtifacts = {
-                ...currentArtifacts,
+            // Update artifacts immediately
+            setArtifacts(prev => ({
+                ...prev,
                 [result.updatedArtifact.id]: result.updatedArtifact
-            };
+            }));
 
-            return {
-                result: JSON.stringify({ success: true }),
-                updatedArtifacts,
-                modifiedArtifactId: result.updatedArtifact.id
-            };
+            return JSON.stringify({ success: true });
         } else {
-            return {
-                result: JSON.stringify({ success: false, error: result.error }),
-                updatedArtifacts: currentArtifacts,
-                modifiedArtifactId: null
-            };
+            return JSON.stringify({ success: false, error: result.error });
         }
     };
 
-    /**
-     * Process artifacts from the parser
-     */
-    const processStreamingArtifacts = (artifacts, currentArtifacts) => {
-        let updatedArtifacts = { ...currentArtifacts };
-        let lastModifiedId = null;
+    // Main conversation loop
+    const runStreamingConversation = async (currentApiMessages, apiKey, modelSettings) => {
+        const messageIdCounter = Date.now() + 1;
 
-        for (const artifact of artifacts) {
-            // Check if this is a rewrite (artifact with same ID already exists)
-            if (updatedArtifacts[artifact.id] && artifact.isComplete) {
-                console.log(`Rewriting artifact ${artifact.id}`);
-                updatedArtifacts[artifact.id] = handleArtifactRewrite(artifact, updatedArtifacts[artifact.id]);
-            } else {
-                console.log(`Creating/updating artifact ${artifact.id}`);
-                updatedArtifacts[artifact.id] = artifact;
-            }
-            lastModifiedId = artifact.id;
-        }
-        console.log(updatedArtifacts);
-        return { updatedArtifacts, lastModifiedId };
-    };
+        // Estimate tokens
+        const messageText = JSON.stringify(currentApiMessages);
+        const estimatedInputTokens = estimateTokens(messageText);
 
-    // Helper function to create UI message objects
-    const createAssistantMessage = (messageId, assistantContent = '') => ({
-        id: messageId,
-        role: 'assistant',
-        content: assistantContent,
-        toolCalls: [],
-        isStreaming: true
-    });
+        // Check rate limits
+        const waitTime = rateLimiter.calculateWaitTime(
+            modelSettings.model,
+            estimatedInputTokens,
+            rateLimits[modelSettings.model]
+        );
 
-    const createToolResultMessage = (messageId, toolResults) => ({
-        id: messageId,
-        role: 'tool_result',
-        content: 'Tool executed',
-        apiContent: {
-            role: 'user',
-            content: toolResults.map(r => ({
-                type: 'tool_result',
-                tool_use_id: r.tool_use_id,
-                content: r.content
-            }))
-        }
-    });
-
-    // Main conversation loop with streaming
-    const runStreamingConversation = async (apiMessages, apiKey, modelSettings) => {
-        let currentApiMessages = [...apiMessages];
-        let messageIdCounter = Date.now() + 1;
-        const artifactParser = new StreamingArtifactParser();
-
-        while (true) {
-            // Get current artifacts for generating update tools
-            const currentArtifacts = await new Promise(resolve => {
-                setArtifacts(current => {
-                    resolve(current);
-                    return current;
-                });
-            });
-
-            // Estimate tokens for the current request
-            const messageText = JSON.stringify(currentApiMessages);
-            const estimatedInputTokens = estimateTokens(messageText);
-
-            // Check rate limits and wait if necessary
-            const waitTime = rateLimiter.calculateWaitTime(
+        if (waitTime > 0) {
+            setIsWaiting(true);
+            setWaitMessage(`Rate limit approaching. Waiting ${Math.ceil(waitTime / 1000)} seconds...`);
+            await rateLimiter.waitIfNeeded(
                 modelSettings.model,
                 estimatedInputTokens,
                 rateLimits[modelSettings.model]
             );
+            setIsWaiting(false);
+            setWaitMessage('');
+        }
 
-            if (waitTime > 0) {
-                setIsWaiting(true);
-                setWaitMessage(`Rate limit approaching. Waiting ${Math.ceil(waitTime / 1000)} seconds...`);
-                await rateLimiter.waitIfNeeded(
-                    modelSettings.model,
-                    estimatedInputTokens,
-                    rateLimits[modelSettings.model]
-                );
-                setIsWaiting(false);
-                setWaitMessage('');
-            }
+        // Initialize streaming
+        setStreamingMessageId(messageIdCounter);
+        setStreamingContent('');
+        setStreamingCleanContent('');
+        setStreamingToolCalls([]);
 
-            // Reset parser for new response
-            artifactParser.reset();
+        // Initialize parser for this streaming session
+        const parser = new StreamingArtifactParser();
+        streamingParserRef.current = parser;
+        streamingArtifactsRef.current = {};
 
-            // Create initial assistant message for streaming
-            const assistantMessageId = messageIdCounter++;
-            const assistantMessage = createAssistantMessage(assistantMessageId);
-            setMessages(prev => [...prev, assistantMessage]);
-            setStreamingMessageId(assistantMessageId);
+        let accumulatedContent = '';
+        let accumulatedCleanContent = '';
+        let toolCalls = [];
+        let usage = { input_tokens: 0, output_tokens: 0 };
+        let stopReason = null;
 
-            let accumulatedContent = '';
-            let toolCalls = [];
-            let usage = { input_tokens: 0, output_tokens: 0 };
-            let lastArtifactId = null;
+        // Check if we're continuing from an incomplete artifact
+        let continuationId = null;
+        if (lastMessageHitMaxTokens && incompleteArtifactIdRef.current) {
+            continuationId = incompleteArtifactIdRef.current;
+        }
 
-            // Stream Claude API response
-            try {
-                const result = await streamClaudeAPI(
-                    currentApiMessages,
-                    apiKey,
-                    modelSettings,
-                    currentArtifacts,
-                    (chunk) => {
-                        if (chunk.type === 'text') {
-                            // Parse the chunk for artifacts
-                            const parseResult = artifactParser.parseChunk(chunk.content);
+        try {
+            // Stream the response
+            await streamClaudeAPI(
+                currentApiMessages,
+                apiKey,
+                modelSettings,
+                artifacts, // Current artifacts for tool generation
+                (chunk) => {
+                    if (chunk.type === 'text') {
+                        // Parse chunk for artifacts
+                        const result = parser.parseChunk(
+                            chunk.content,
+                            accumulatedContent === '' && continuationId ? continuationId : null
+                        );
 
-                            // Update message content with cleaned text
-                            accumulatedContent += parseResult.cleanedTextDelta;
-                            setMessages(prev => prev.map(msg =>
-                                msg.id === assistantMessageId
-                                    ? { ...msg, content: accumulatedContent }
-                                    : msg
-                            ));
+                        accumulatedContent += chunk.content;
+                        accumulatedCleanContent += result.cleanedTextDelta;
 
-                            // Handle new artifacts
-                            if (parseResult.artifacts.length > 0) {
-                                const { updatedArtifacts, lastModifiedId } = processStreamingArtifacts(
-                                    parseResult.artifacts,
-                                    currentArtifacts
-                                );
-                                setArtifacts(updatedArtifacts);
-                                lastArtifactId = lastModifiedId;
-
-                                // Auto-open artifacts panel
-                                if (window.innerWidth >= 768) {
-                                    setShowArtifacts(true);
-                                }
-                                setActiveArtifact(lastModifiedId);
+                        // Update streaming artifacts
+                        for (const artifact of result.artifacts || []) {
+                            if (!artifact.isContinuation) {
+                                streamingArtifactsRef.current[artifact.id] = {
+                                    id: artifact.id,
+                                    type: artifact.type || 'text/plain',
+                                    language: artifact.language,
+                                    title: artifact.title || 'Untitled',
+                                    content: artifact.content || '',
+                                    version: 1,
+                                    timestamp: Date.now(),
+                                    isComplete: false
+                                };
                             }
+                        }
 
-                            // Handle artifact content updates
-                            if (parseResult.activeArtifactUpdate) {
+                        // Handle artifact content updates
+                        if (result.activeArtifactUpdate) {
+                            const update = result.activeArtifactUpdate;
+                            if (streamingArtifactsRef.current[update.id]) {
+                                streamingArtifactsRef.current[update.id].content = update.content;
+                                streamingArtifactsRef.current[update.id].isComplete = update.isComplete;
+                            } else if (continuationId && update.id === continuationId) {
+                                // Continuing from previous message
                                 setArtifacts(prev => ({
                                     ...prev,
-                                    [parseResult.activeArtifactUpdate.id]: {
-                                        ...prev[parseResult.activeArtifactUpdate.id],
-                                        content: parseResult.activeArtifactUpdate.content,
-                                        isComplete: parseResult.activeArtifactUpdate.isComplete
+                                    [continuationId]: {
+                                        ...prev[continuationId],
+                                        content: prev[continuationId].content + update.content,
+                                        isComplete: update.isComplete
                                     }
                                 }));
                             }
-                        } else if (chunk.type === 'tool_use') {
-                            toolCalls.push(chunk.toolCall);
-                            setMessages(prev => prev.map(msg =>
-                                msg.id === assistantMessageId
-                                    ? { ...msg, toolCalls: [...msg.toolCalls, chunk.toolCall] }
-                                    : msg
-                            ));
-                        } else if (chunk.type === 'done') {
-                            usage = chunk.usage;
                         }
+
+                        // Update artifacts state with streaming artifacts
+                        setArtifacts(prev => {
+                            const updated = {
+                                ...prev,
+                                ...streamingArtifactsRef.current
+                            };
+                            if (showDebugInfo) {
+                                console.log('Streaming artifacts update:', streamingArtifactsRef.current);
+                                console.log('Total artifacts:', updated);
+                            }
+                            return updated;
+                        });
+
+                        setStreamingContent(accumulatedContent);
+                        setStreamingCleanContent(accumulatedCleanContent);
+
+                        // Auto-open artifacts if detected
+                        if (chunk.content.includes(OPENING_TAG) && window.innerWidth >= 768) {
+                            setShowArtifacts(true);
+                        }
+                    } else if (chunk.type === 'tool_use') {
+                        toolCalls.push(chunk.toolCall);
+                        setStreamingToolCalls([...toolCalls]);
+                    } else if (chunk.type === 'done') {
+                        usage = chunk.usage;
+                        stopReason = chunk.stop_reason || null;
                     }
-                );
-
-                // Finalize parsing
-                const finalResult = artifactParser.finalize();
-                if (finalResult.cleanedTextDelta) {
-                    accumulatedContent += finalResult.cleanedTextDelta;
                 }
-                if (finalResult.activeArtifactUpdate) {
-                    setArtifacts(prev => ({
-                        ...prev,
-                        [finalResult.activeArtifactUpdate.id]: {
-                            ...prev[finalResult.activeArtifactUpdate.id],
-                            content: finalResult.activeArtifactUpdate.content,
-                            isComplete: finalResult.activeArtifactUpdate.isComplete
-                        }
-                    }));
+            );
+
+            // Finalize parser
+            const finalResult = parser.finalize();
+
+            // Handle any final updates
+            if (finalResult.activeArtifactUpdate) {
+                const update = finalResult.activeArtifactUpdate;
+                if (streamingArtifactsRef.current[update.id]) {
+                    streamingArtifactsRef.current[update.id].content = update.content;
+                    streamingArtifactsRef.current[update.id].isComplete = update.isComplete;
+                } else if (continuationId && update.id === continuationId) {
+                    streamingArtifactsRef.current[continuationId] = {
+                        ...artifacts[continuationId],
+                        content: artifacts[continuationId].content + update.content,
+                        isComplete: update.isComplete
+                    };
                 }
+            }
 
-                // Update final message state
-                setMessages(prev => prev.map(msg =>
-                    msg.id === assistantMessageId
-                        ? { ...msg, content: accumulatedContent, isStreaming: false }
-                        : msg
-                ));
-                setStreamingMessageId(null);
-
-                // Record token usage
-                rateLimiter.recordUsage(
-                    modelSettings.model,
-                    usage.input_tokens,
-                    usage.output_tokens
-                );
-
-                // If no tool calls, conversation is complete
-                if (toolCalls.length === 0) {
-                    break;
+            // Process any remaining artifacts
+            for (const artifact of finalResult.artifacts || []) {
+                if (!artifact.isContinuation) {
+                    streamingArtifactsRef.current[artifact.id] = artifact;
                 }
+            }
 
-                // Process tool calls
+            // Final update to artifacts with proper structure
+            const finalArtifacts = {};
+            for (const [id, artifact] of Object.entries(streamingArtifactsRef.current)) {
+                finalArtifacts[id] = {
+                    id: artifact.id,
+                    type: artifact.type || 'text/plain',
+                    language: artifact.language,
+                    title: artifact.title || 'Untitled',
+                    content: artifact.content || '',
+                    version: artifact.version || 1,
+                    timestamp: artifact.timestamp || Date.now(),
+                    isComplete: artifact.isComplete !== false
+                };
+            }
+
+            setArtifacts(prev => ({
+                ...prev,
+                ...finalArtifacts
+            }));
+
+            // Update incomplete artifact tracking
+            incompleteArtifactIdRef.current = finalResult.incompleteArtifactId || null;
+
+            // Update max tokens flag based on stop reason
+            setLastMessageHitMaxTokens(stopReason === 'max_tokens');
+
+            // Clear streaming state
+            setStreamingContent('');
+            setStreamingCleanContent('');
+            setStreamingToolCalls([]);
+            setStreamingMessageId(null);
+            streamingParserRef.current = null;
+            streamingArtifactsRef.current = {};
+
+            // Record usage
+            rateLimiter.recordUsage(
+                modelSettings.model,
+                usage.input_tokens,
+                usage.output_tokens
+            );
+
+            // Build new API message
+            let newApiMessage;
+
+            if (toolCalls.length > 0) {
+                newApiMessage = {
+                    role: 'assistant',
+                    content: toolCalls.map(tc => ({
+                        type: 'tool_use',
+                        id: tc.id,
+                        name: tc.name,
+                        input: tc.input
+                    }))
+                };
+            } else {
+                newApiMessage = {
+                    role: 'assistant',
+                    content: accumulatedContent
+                };
+            }
+
+            const updatedApiMessages = [...currentApiMessages, newApiMessage];
+            setApiMessages(updatedApiMessages);
+
+            // Process tool calls if any
+            if (toolCalls.length > 0) {
                 const toolResults = [];
+
                 for (const call of toolCalls) {
                     let result;
 
-                    // Check if this is an artifact update tool
                     if (call.name.startsWith('update_artifact_')) {
-                        const currentArtifacts = await new Promise(resolve => {
-                            setArtifacts(current => {
-                                resolve(current);
-                                return current;
-                            });
-                        });
-
-                        const artifactProcessResult = processArtifactUpdateTool(call, currentArtifacts);
-
-                        // Update artifacts state
-                        setArtifacts(artifactProcessResult.updatedArtifacts);
-
-                        if (artifactProcessResult.modifiedArtifactId) {
-                            setActiveArtifact(artifactProcessResult.modifiedArtifactId);
-                        }
-
-                        result = artifactProcessResult.result;
+                        result = processArtifactUpdateTool(call, artifacts);
                     } else if (call.name === 'repl') {
                         result = await processReplTool(call);
                     } else {
@@ -310,115 +400,164 @@ const ClaudeClone = () => {
                     });
                 }
 
-                // Create and add tool result message
-                const toolResultMessage = createToolResultMessage(messageIdCounter++, toolResults);
-                setMessages(prev => [...prev, toolResultMessage]);
+                // Add tool results and continue conversation
+                const toolResultMessage = {
+                    role: 'user',
+                    content: toolResults.map(r => ({
+                        type: 'tool_result',
+                        tool_use_id: r.tool_use_id,
+                        content: r.content
+                    }))
+                };
 
-                // Update API messages for next iteration
-                currentApiMessages = [
-                    ...currentApiMessages,
-                    {
-                        role: 'assistant',
-                        content: toolCalls.map(tc => ({
-                            type: 'tool_use',
-                            id: tc.id,
-                            name: tc.name,
-                            input: tc.input
-                        }))
-                    },
-                    {role: 'user', content: toolResultMessage.apiContent.content}
-                ];
+                const finalApiMessages = [...updatedApiMessages, toolResultMessage];
+                setApiMessages(finalApiMessages);
 
-            } catch (error) {
-                console.error('Streaming error:', error);
-                setMessages(prev => prev.map(msg =>
-                    msg.id === assistantMessageId
-                        ? { ...msg, content: `Error: ${error.message}`, isStreaming: false }
-                        : msg
-                ));
-                setStreamingMessageId(null);
-                break;
+                // Continue the conversation
+                await runStreamingConversation(finalApiMessages, apiKey, modelSettings);
             }
+
+        } catch (error) {
+            console.error('Streaming error:', error);
+            setStreamingContent('');
+            setStreamingCleanContent('');
+            setStreamingToolCalls([]);
+            setStreamingMessageId(null);
+            streamingParserRef.current = null;
+            streamingArtifactsRef.current = {};
+
+            // Add error message
+            setApiMessages([...currentApiMessages, {
+                role: 'assistant',
+                content: `Error: ${error.message}`
+            }]);
         }
     };
 
-    // Main handleSend function with streaming
+    // Handle sending a message
     const handleSend = async () => {
-        // Early return for invalid input
         if (!input.trim() || !apiKey) return;
 
-        // Create and add user message
-        const userMessage = {
-            id: Date.now(),
+        const userContent = input;
+        const newApiMessages = [...apiMessages, {
             role: 'user',
-            content: input
-        };
-        setMessages(prev => [...prev, userMessage]);
+            content: userContent
+        }];
+
+        setApiMessages(newApiMessages);
         setInput('');
         setIsLoading(true);
 
         try {
-            // Build API message history
-            const apiMessages = buildApiMessages(messages, input);
-
-            // Run the streaming conversation loop
-            await runStreamingConversation(
-                apiMessages,
-                apiKey,
-                modelSettings
-            );
-
+            await runStreamingConversation(newApiMessages, apiKey, modelSettings);
         } catch (error) {
-            console.error('Error calling Claude API:', error);
-            const errorMessage = {
-                id: Date.now() + 999,
-                role: 'assistant',
-                content: `Error: ${error.message}`
-            };
-            setMessages(prev => [...prev, errorMessage]);
+            console.error('Error in conversation:', error);
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleClear = () => {
-        setMessages([]);
+        setApiMessages([]);
         setArtifacts({});
-        setActiveArtifact(null);
+        setStreamingContent('');
+        setStreamingCleanContent('');
+        setStreamingToolCalls([]);
         setStreamingMessageId(null);
+        streamingParserRef.current = null;
+        streamingArtifactsRef.current = {};
+        incompleteArtifactIdRef.current = null;
+        setActiveArtifact(null);
+        setLastMessageHitMaxTokens(false);
     };
 
     const handleEditSubmit = async (messageId, newContent) => {
-        // Find the message index
-        const messageIndex = messages.findIndex(msg => msg.id === messageId);
-        if (messageIndex === -1) return;
+        const displayMessages = buildDisplayMessages();
 
-        // Clear all messages after this one
-        const newMessages = messages.slice(0, messageIndex);
+        // Find the display message
+        const displayMessageIndex = displayMessages.findIndex(msg => msg.id === messageId);
+        if (displayMessageIndex === -1) return;
 
-        // Update the edited message
-        const editedMessage = {
-            ...messages[messageIndex],
-            content: newContent
-        };
+        const displayMessage = displayMessages[displayMessageIndex];
 
-        setMessages([...newMessages, editedMessage]);
+        // Use the apiIndex to cut off at the right point
+        if (displayMessage.apiIndex !== undefined) {
+            // Clear messages after the edit point
+            const truncatedMessages = apiMessages.slice(0, displayMessage.apiIndex);
+            setApiMessages(truncatedMessages);
 
-        // Set the input to the edited content and trigger send
-        setInput(newContent);
+            // Rebuild artifacts from truncated messages
+            const rebuiltArtifacts = {};
+            const parser = new StreamingArtifactParser();
 
-        // Use setTimeout to ensure state updates have propagated
-        setTimeout(() => {
-            handleSend();
-        }, 500);
+            for (let i = 0; i < truncatedMessages.length; i++) {
+                const msg = truncatedMessages[i];
+                if (msg.role === 'assistant' && typeof msg.content === 'string') {
+                    parser.reset();
+
+                    const result = parser.parseChunk(msg.content);
+                    const finalResult = parser.finalize();
+
+                    // Process artifacts
+                    for (const artifact of [...(result.artifacts || []), ...(finalResult.artifacts || [])]) {
+                        if (!artifact.isContinuation) {
+                            rebuiltArtifacts[artifact.id] = artifact;
+                        }
+                    }
+
+                    // Apply updates
+                    const updates = [result.activeArtifactUpdate, finalResult.activeArtifactUpdate].filter(Boolean);
+                    for (const update of updates) {
+                        if (rebuiltArtifacts[update.id]) {
+                            rebuiltArtifacts[update.id].content = update.content;
+                            rebuiltArtifacts[update.id].isComplete = update.isComplete;
+                        }
+                    }
+                }
+            }
+
+            setArtifacts(rebuiltArtifacts);
+            incompleteArtifactIdRef.current = null;
+            setLastMessageHitMaxTokens(false);
+
+            // Send the edited message
+            setInput(newContent);
+            setTimeout(handleSend, 100);
+        }
     };
 
     const handleStop = () => {
-        // todo: implement stop functionality for streaming
         setIsLoading(false);
         setIsWaiting(false);
+        setStreamingContent('');
+        setStreamingCleanContent('');
+        setStreamingToolCalls([]);
         setStreamingMessageId(null);
+        streamingParserRef.current = null;
+        streamingArtifactsRef.current = {};
     };
+
+    // Auto-select newest artifact when artifacts change
+    React.useEffect(() => {
+        const artifactEntries = Object.entries(artifacts);
+        if (artifactEntries.length > 0) {
+            // Sort by timestamp to get the newest
+            artifactEntries.sort((a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
+            const newestId = artifactEntries[artifactEntries.length - 1][0];
+
+            // If no artifact is selected or the current selection doesn't exist, select the newest
+            if (!activeArtifact || !artifacts[activeArtifact]) {
+                setActiveArtifact(newestId);
+            }
+
+            // Auto-show artifacts panel if we have artifacts
+            if (!showArtifacts && window.innerWidth >= 768) {
+                setShowArtifacts(true);
+            }
+        }
+    }, [artifacts]);
+
+    const displayMessages = buildDisplayMessages();
 
     return (
         <div className="flex h-screen bg-gradient-to-br from-slate-50 to-slate-100 relative">
@@ -435,8 +574,7 @@ const ClaudeClone = () => {
             />
 
             {/* Chat Section */}
-            <div
-                className={`flex-1 flex flex-col transition-all duration-300 ${showArtifacts && window.innerWidth >= 768 ? 'md:mr-0' : ''}`}>
+            <div className={`flex-1 flex flex-col transition-all duration-300 ${showArtifacts && window.innerWidth >= 768 ? 'md:mr-0' : ''}`}>
                 <Header
                     showApiKey={showApiKey}
                     setShowApiKey={setShowApiKey}
@@ -454,16 +592,23 @@ const ClaudeClone = () => {
                 />
 
                 <Messages
-                    messages={messages}
+                    apiMessages={apiMessages}
                     isLoading={isLoading}
                     handleEditSubmit={handleEditSubmit}
                     streamingMessageId={streamingMessageId}
+                    streamingContent={streamingContent}
+                    streamingCleanContent={streamingCleanContent}
+                    streamingToolCalls={streamingToolCalls}
+                    artifacts={artifacts}
+                    onArtifactClick={(artifactId) => {
+                        setActiveArtifact(artifactId);
+                        setShowArtifacts(true);
+                    }}
                 />
 
                 {/* Rate Limit Waiting Indicator */}
                 {isWaiting && (
-                    <div
-                        className="mx-4 mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
+                    <div className="mx-4 mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
                         <svg className="animate-spin h-4 w-4 text-amber-600" xmlns="http://www.w3.org/2000/svg"
                              fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
@@ -476,7 +621,7 @@ const ClaudeClone = () => {
                 )}
 
                 <ChatInput
-                    canContinue={false}
+                    canContinue={lastMessageHitMaxTokens}
                     isLoading={isLoading || isWaiting}
                     handleSend={handleSend}
                     input={input}
@@ -493,6 +638,9 @@ const ClaudeClone = () => {
                 activeArtifact={activeArtifact}
                 setActiveArtifact={setActiveArtifact}
                 showDebugInfo={showDebugInfo}
+                apiMessages={apiMessages}
+                streamingContent={streamingContent}
+                streamingMessageId={streamingMessageId}
             />
 
             <MobileArtifactsViewer
@@ -507,7 +655,23 @@ const ClaudeClone = () => {
                     setShowArtifacts={setShowArtifacts}
                     artifacts={artifacts}
                     activeArtifact={activeArtifact}
+                    apiMessages={apiMessages}
+                    streamingContent={streamingContent}
+                    streamingMessageId={streamingMessageId}
+                    setActiveArtifact={setActiveArtifact}
                 />
+            )}
+
+            {/* Debug Panel */}
+            {showDebugInfo && (
+                <div className="fixed bottom-20 right-4 max-w-md max-h-96 overflow-auto bg-gray-900 text-white p-4 rounded-lg shadow-lg">
+                    <h3 className="font-bold mb-2">API Messages</h3>
+                    <pre className="text-xs">{JSON.stringify(apiMessages, null, 2)}</pre>
+                    <h3 className="font-bold mb-2 mt-4">Artifacts</h3>
+                    <pre className="text-xs">{JSON.stringify(artifacts, null, 2)}</pre>
+                    <h3 className="font-bold mb-2 mt-4">Incomplete Artifact ID</h3>
+                    <pre className="text-xs">{incompleteArtifactIdRef.current || 'null'}</pre>
+                </div>
             )}
         </div>
     );

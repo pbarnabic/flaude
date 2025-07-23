@@ -1,3 +1,5 @@
+import {CLOSING_TAG, OPENING_TAG, TAG_NAME} from "./ArtifactDelimiters.jsx";
+
 export const SYSTEM_MESSAGE_OG = `
 
 When to use artifacts:
@@ -100,7 +102,6 @@ Usage notes
 
 Create artifacts for text over EITHER 20 lines OR 1500 characters that meet the criteria above. Shorter text should remain in the conversation, except for creative writing which should always be in artifacts.
 For structured reference content (meal plans, workout schedules, study guides, etc.), prefer markdown artifacts as they're easily saved and referenced by users
-Strictly limit to one artifact per response - use the update mechanism for corrections
 Focus on creating complete, functional solutions
 For code artifacts: Use concise variable names (e.g., i, j for indices, e for event, el for element) to maximize content within context limits while maintaining readability
 
@@ -170,19 +171,19 @@ Include the complete and updated content of the artifact, without any truncation
 
 CRITICAL ARTIFACT CREATION PROTOCOL
 Creating Artifacts
-To create an artifact, use the direct LLMArtifact tag syntax:
-<LLMArtifact type="artifact_type" id="unique_id" language="language_name" title="artifact_title">
+To create an artifact, use the direct ${TAG_NAME} tag syntax:
+${OPENING_TAG} type="artifact_type" id="unique_id" language="language_name" title="artifact_title">
 ... full content here ...
-</LLMArtifact>
+${CLOSING_TAG}
 IMPORTANT:
 
 You CANNOT use the artifacts function to create artifacts
-You MUST use the <LLMArtifact> tag syntax shown above
+You MUST use the ${OPENING_TAG}> tag syntax shown above
 The artifact content goes directly between the opening and closing tags
-You cannot use update_artifact until an artifact has been created with <LLMArtifact> tags first
-
+You cannot use update_artifact until an artifact has been created with ${OPENING_TAG}> tags first
+If you are cut off during artifact generation due to max tokens, simply pick up from where you left off on the next turn. You do not need to use another ${OPENING_TAG} tag to resume.
 Updating Artifacts
-ONLY after an artifact has been created with <LLMArtifact> tags, you can use the artifacts function with the corresponding "update" command:
+ONLY after an artifact has been created with ${OPENING_TAG}> tags, you can use the artifacts function with the corresponding "update" command:
 json{
   "command": "update",
   "id": "artifact_id", 
@@ -195,13 +196,13 @@ Each artifact will have its own custom update_artifact tool
 Critical Rules for Updates:
 
 old_str must match EXACTLY and appear only once in the artifact
-You can only update artifacts that have already been output as <LLMArtifact> blocks
-Use updates for small changes; use <LLMArtifact> rewrite for major changes. Simply specify the same id for the artifact you wish to rewrite.
+You can only update artifacts that have already been output as ${OPENING_TAG}> blocks
+Use updates for small changes; use ${OPENING_TAG}> rewrite for major changes. Simply specify the same id for the artifact you wish to rewrite.
 You can call update multiple times, but limit to 4 updates per message
 
 Workflow
 
-First: Create artifact using <LLMArtifact> tags
+First: Create artifact using ${OPENING_TAG}> tags
 Then: Use artifacts function with "update" command for modifications
 Never: Try to update an artifact that hasn't been created yet
 
