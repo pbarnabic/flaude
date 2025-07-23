@@ -47,9 +47,10 @@ const ClaudeClone = () => {
     });
     const [rateLimits, setRateLimits] = useState({});
 
-    // Get current artifacts from apiMessages + streamingContent
+    // Get current artifacts (latest versions for processing)
     const getCurrentArtifacts = () => {
-        return ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
+        const artifactVersions = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
+        return ArtifactParsingUtils.getLatestArtifacts(artifactVersions);
     };
 
     /**
@@ -268,7 +269,6 @@ const ClaudeClone = () => {
 
         // Send the edited message
         setInput(newContent);
-        // setTimeout(handleSend, 750);
     };
 
     const handleStop = () => {

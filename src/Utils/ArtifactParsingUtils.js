@@ -8,13 +8,13 @@ export const ArtifactParsingUtils = {
      * Parse artifacts by extracting complete artifact tags from messages
      * @param {Array} apiMessages - Array of API messages
      * @param {string} streamingContent - Current streaming content
-     * @returns {Object} - Object containing parsed artifacts
+     * @returns {Object} - Object containing parsed artifacts with all versions
      */
     parseArtifactsFromMessages: (apiMessages = [], streamingContent = '') => {
-        const artifacts = {};
+        const artifactVersions = {}; // { artifactId: [version1, version2, ...] }
 
         // Helper to extract artifacts from content
-        const extractArtifacts = (content, isStreaming = false) => {
+        const extractArtifacts = (content, messageIndex = -1, isStreaming = false) => {
             const foundArtifacts = {};
             let pos = 0;
 
@@ -59,9 +59,10 @@ export const ArtifactParsingUtils = {
                         language: languageMatch ? languageMatch[1] : undefined,
                         title: titleMatch ? titleMatch[1] : 'Untitled',
                         content: artifactContent,
-                        version: 1,
-                        timestamp: Date.now(),
-                        isComplete: isComplete
+                        timestamp: Date.now() + messageIndex,
+                        messageIndex: messageIndex,
+                        isComplete: isComplete,
+                        isStreaming: isStreaming
                     };
                 }
 
@@ -71,21 +72,70 @@ export const ArtifactParsingUtils = {
             return foundArtifacts;
         };
 
-        // Process API messages
-        for (const apiMsg of apiMessages) {
+        // Process API messages to build version history
+        for (let i = 0; i < apiMessages.length; i++) {
+            const apiMsg = apiMessages[i];
             if (apiMsg.role === 'assistant' && typeof apiMsg.content === 'string') {
-                const messageArtifacts = extractArtifacts(apiMsg.content, false);
-                Object.assign(artifacts, messageArtifacts);
+                const messageArtifacts = extractArtifacts(apiMsg.content, i, false);
+
+                Object.values(messageArtifacts).forEach(artifact => {
+                    if (!artifactVersions[artifact.id]) {
+                        artifactVersions[artifact.id] = [];
+                    }
+                    artifactVersions[artifact.id].push({
+                        ...artifact,
+                        version: artifactVersions[artifact.id].length + 1
+                    });
+                });
             }
         }
 
         // Process streaming content
         if (streamingContent) {
-            const streamingArtifacts = extractArtifacts(streamingContent, true);
-            Object.assign(artifacts, streamingArtifacts);
+            const streamingArtifacts = extractArtifacts(streamingContent, apiMessages.length, true);
+
+            Object.values(streamingArtifacts).forEach(artifact => {
+                if (!artifactVersions[artifact.id]) {
+                    artifactVersions[artifact.id] = [];
+                }
+
+                const versions = artifactVersions[artifact.id];
+                const lastVersion = versions[versions.length - 1];
+
+                if (lastVersion && lastVersion.isStreaming && !lastVersion.isComplete) {
+                    // Update existing streaming version
+                    lastVersion.content = artifact.content;
+                    lastVersion.isComplete = artifact.isComplete;
+                    lastVersion.timestamp = artifact.timestamp;
+                } else {
+                    // Create new version for streaming
+                    versions.push({
+                        ...artifact,
+                        version: versions.length + 1
+                    });
+                }
+            });
         }
 
-        return artifacts;
+        return artifactVersions;
+    },
+
+    /**
+     * Get the latest version of each artifact
+     * @param {Object} artifactVersions - All artifact versions
+     * @returns {Object} - Latest version of each artifact
+     */
+    getLatestArtifacts: (artifactVersions) => {
+        const latestArtifacts = {};
+
+        Object.keys(artifactVersions).forEach(artifactId => {
+            const versions = artifactVersions[artifactId];
+            if (versions && versions.length > 0) {
+                latestArtifacts[artifactId] = versions[versions.length - 1];
+            }
+        });
+
+        return latestArtifacts;
     },
 
     /**

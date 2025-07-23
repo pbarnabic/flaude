@@ -19,8 +19,9 @@ const Messages = ({
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [apiMessages, streamingContent]);
 
-    // Use shared parsing utility
-    const artifacts = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
+    // Use shared parsing utility - get all versions and latest artifacts
+    const artifactVersions = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
+    const latestArtifacts = ArtifactParsingUtils.getLatestArtifacts(artifactVersions);
 
     const buildDisplayMessages = () => {
         const display = [];
@@ -51,7 +52,7 @@ const Messages = ({
                             type: "artifact",
                             role: "assistant",
                             artifactId: segment.id,
-                            artifact: artifacts[segment.id],
+                            artifact: latestArtifacts[segment.id], // Use latest artifacts
                             isStreaming: !segment.isComplete
                         });
                     }
@@ -77,7 +78,7 @@ const Messages = ({
                         type: "artifact",
                         role: "assistant",
                         artifactId: segment.id,
-                        artifact: artifacts[segment.id],
+                        artifact: latestArtifacts[segment.id], // Use latest artifacts
                         isStreaming: !segment.isComplete
                     });
                 }
@@ -111,12 +112,16 @@ const Messages = ({
         if (msg.type === "artifact") {
             if (!msg.artifact) return null;
 
-            const icon =
-                msg.artifact.type === "application/vnd.ant.code" || msg.artifact.language ? (
-                    <Code className="w-4 h-4" />
-                ) : (
-                    <FileText className="w-4 h-4" />
-                );
+            const artifact = msg.artifact;
+            const icon = (artifact.type === "application/vnd.ant.code" || artifact.language) ? (
+                <Code className="w-4 h-4" />
+            ) : (
+                <FileText className="w-4 h-4" />
+            );
+
+            // Get the display type/language
+            const displayType = artifact.language ||
+                (artifact.type ? artifact.type.split("/").pop() : "Unknown");
 
             return (
                 <div key={msg.id} className="flex gap-3 justify-start">
@@ -135,12 +140,12 @@ const Messages = ({
                             </div>
                             <div className="text-left">
                                 <div className="font-medium text-slate-800">
-                                    {msg.artifact.title || "Untitled Artifact"}
+                                    {artifact.title || "Untitled Artifact"}
                                 </div>
                                 <div className="text-sm text-slate-600 flex items-center gap-2 mt-0.5">
                                     {icon}
-                                    <span>{msg.artifact.language || msg.artifact.type.split("/").pop()}</span>
-                                    {!msg.artifact.isComplete && (
+                                    <span>{displayType}</span>
+                                    {!artifact.isComplete && (
                                         <span className="text-amber-600">(In progress...)</span>
                                     )}
                                 </div>

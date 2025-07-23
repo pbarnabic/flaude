@@ -9,7 +9,8 @@ const MobileArtifactsViewer = ({
                                    setShowArtifacts
                                }) => {
     // Use shared parsing utility to derive artifacts from props
-    const artifacts = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
+    const artifactVersions = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
+    const artifacts = ArtifactParsingUtils.getLatestArtifacts(artifactVersions);
 
     return (
         <>

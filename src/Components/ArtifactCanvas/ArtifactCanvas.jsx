@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from "react";
-import {Check, Code, Copy, FileText, Play, X} from "lucide-react";
+import {Check, ChevronDown, Code, Copy, FileText, History, Play, X} from "lucide-react";
 import {ArtifactParsingUtils} from "../../Utils/ArtifactParsingUtils.js";
 
 const ArtifactCanvas = ({
@@ -13,9 +13,27 @@ const ArtifactCanvas = ({
                         }) => {
     const codeRef = useRef(null);
     const [copied, setCopied] = useState(false);
+    const [selectedVersions, setSelectedVersions] = useState({});
+    const [showVersionDropdown, setShowVersionDropdown] = useState({});
 
-    // Use shared parsing utility
-    const artifacts = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
+    // Get all artifact versions
+    const artifactVersions = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
+
+    // Get current display artifacts (respecting version selection)
+    const artifacts = {};
+    Object.keys(artifactVersions).forEach(artifactId => {
+        const versions = artifactVersions[artifactId];
+        const selectedVersion = selectedVersions[artifactId] || versions.length; // Default to latest
+        const artifact = versions[selectedVersion - 1];
+        if (artifact) {
+            artifacts[artifactId] = {
+                ...artifact,
+                _allVersions: versions,
+                _selectedVersion: selectedVersion,
+                _totalVersions: versions.length
+            };
+        }
+    });
 
     const copyToClipboard = () => {
         if (activeArtifact && artifacts[activeArtifact]) {
@@ -23,6 +41,17 @@ const ArtifactCanvas = ({
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
+    };
+
+    const selectVersion = (artifactId, version) => {
+        setSelectedVersions(prev => ({
+            ...prev,
+            [artifactId]: version
+        }));
+        setShowVersionDropdown(prev => ({
+            ...prev,
+            [artifactId]: false
+        }));
     };
 
     useEffect(() => {
@@ -34,19 +63,17 @@ const ArtifactCanvas = ({
         }
     }, [activeArtifact, artifacts]);
 
-    // Simple and robust auto-selection logic
+    // Auto-selection logic
     useEffect(() => {
         const artifactEntries = Object.entries(artifacts);
         if (artifactEntries.length === 0) return;
 
-        // Check if we're currently streaming and if there's an incomplete artifact in the streaming content
         const isCurrentlyStreaming = streamingContent && streamingContent.length > 0;
         let activeStreamingArtifact = null;
 
         if (isCurrentlyStreaming) {
-            // Only look for incomplete artifacts in the current streaming content
             const streamingArtifacts = ArtifactParsingUtils.parseArtifactsFromMessages([], streamingContent);
-            const incompleteStreamingArtifact = Object.entries(streamingArtifacts)
+            const incompleteStreamingArtifact = Object.entries(ArtifactParsingUtils.getLatestArtifacts(streamingArtifacts))
                 .find(([id, artifact]) => !artifact.isComplete);
 
             if (incompleteStreamingArtifact) {
@@ -54,64 +81,140 @@ const ArtifactCanvas = ({
             }
         }
 
-        // Auto-switch logic:
         if (activeStreamingArtifact) {
-            // There's an artifact currently being streamed - switch to it
             if (activeArtifact !== activeStreamingArtifact) {
                 setActiveArtifact(activeStreamingArtifact);
             }
         } else if (!activeArtifact || !artifacts[activeArtifact]) {
-            // No active streaming artifact, and either no selection or invalid selection
-            // Select the newest complete artifact
             artifactEntries.sort((a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
             const newestId = artifactEntries[artifactEntries.length - 1][0];
             setActiveArtifact(newestId);
         }
-        // In all other cases, respect the current selection and don't change anything
     }, [artifacts, activeArtifact, setActiveArtifact, streamingContent]);
 
-    const VersionIndicator = ({version}) => (
-        <span className="text-xs text-slate-500 ml-2">v{version}</span>
-    );
+    const VersionSelector = ({ artifactId }) => {
+        const artifact = artifacts[artifactId];
+        const versions = artifactVersions[artifactId] || [];
 
-    const StatusIndicator = ({isComplete}) => {
+        console.log('VersionSelector Debug:', {
+            artifactId,
+            artifact,
+            versions,
+            totalVersions: versions.length,
+            showDropdown: showVersionDropdown[artifactId]
+        });
+
+        if (!artifact || versions.length <= 1) return null;
+
+        const selectedVersion = selectedVersions[artifactId] || versions.length;
+        const isLatest = selectedVersion === versions.length;
+
+        return (
+            <div className="relative">
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setShowVersionDropdown(prev => ({
+                            ...prev,
+                            [artifactId]: !prev[artifactId]
+                        }));
+                    }}
+                    className={`text-xs flex items-center gap-1 px-2 py-1 rounded ${
+                        isLatest
+                            ? 'text-slate-500 hover:bg-slate-700'
+                            : 'text-amber-400 bg-amber-900/30 hover:bg-amber-900/50'
+                    }`}
+                >
+                    <History className="w-3 h-3" />
+                    v{selectedVersion}
+                    <ChevronDown className="w-3 h-3" />
+                </button>
+
+                {showVersionDropdown[artifactId] && (
+                    <div className="absolute top-full left-0 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg min-w-32 z-50"
+                         onClick={(e) => e.stopPropagation()}>
+                        <div className="py-1">
+                            {versions.map((version, index) => {
+                                const versionNumber = index + 1;
+                                const isSelected = selectedVersion === versionNumber;
+                                const isLatestVersion = versionNumber === versions.length;
+
+                                return (
+                                    <button
+                                        key={versionNumber}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            selectVersion(artifactId, versionNumber);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-700 ${
+                                            isSelected ? 'bg-slate-700 text-white' : 'text-slate-300'
+                                        }`}
+                                    >
+                                        <span>v{versionNumber}</span>
+                                        {isLatestVersion && (
+                                            <span className="text-green-400 text-xs">(latest)</span>
+                                        )}
+                                        {isSelected && <Check className="w-3 h-3 ml-auto" />}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const StatusIndicator = ({ isComplete }) => {
         if (isComplete) return null;
         return (
             <span className="text-xs text-amber-500 ml-2 flex items-center gap-1">
                 <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-                Incomplete
+                Streaming
             </span>
         );
     };
 
+    // Close dropdowns when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => {
+            setShowVersionDropdown({});
+        };
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+    }, []);
+
     return (
         <>
             {(Object.keys(artifacts).length > 0 || showArtifacts) && (
-                <div
-                    className={`hidden md:flex w-1/2 border-l border-slate-200 bg-slate-900 flex-col ${showArtifacts ? '' : 'md:hidden'}`}>
+                <div className={`hidden md:flex w-1/2 border-l border-slate-200 bg-slate-900 flex-col ${showArtifacts ? '' : 'md:hidden'}`}>
                     {/* Artifact Tabs */}
-                    <div className="bg-slate-800 border-b border-slate-700 flex items-center overflow-x-auto">
+                    <div className="bg-slate-800 border-b border-slate-700 flex items-center overflow-visible">
                         {Object.values(artifacts).map((artifact) => (
-                            <button
+                            <div
                                 key={artifact.id}
-                                onClick={() => setActiveArtifact(artifact.id)}
                                 className={`px-4 py-3 flex items-center gap-2 whitespace-nowrap border-r border-slate-700 transition-all ${
                                     activeArtifact === artifact.id
                                         ? 'bg-slate-900 text-white'
                                         : 'text-slate-400 hover:bg-slate-700 hover:text-slate-300'
                                 }`}
                             >
-                                {artifact.type === 'application/vnd.ant.code' || artifact.language ? (
-                                    <Code className="w-4 h-4"/>
-                                ) : artifact.type === 'application/vnd.ant.react' ? (
-                                    <Play className="w-4 h-4"/>
-                                ) : (
-                                    <FileText className="w-4 h-4"/>
-                                )}
-                                <span className="text-sm font-medium">{artifact.title || 'Untitled'}</span>
-                                <VersionIndicator version={artifact.version}/>
+                                <button
+                                    onClick={() => setActiveArtifact(artifact.id)}
+                                    className="flex items-center gap-2 hover:text-white transition-colors"
+                                >
+                                    {artifact.type === 'application/vnd.ant.code' || artifact.language ? (
+                                        <Code className="w-4 h-4"/>
+                                    ) : artifact.type === 'application/vnd.ant.react' ? (
+                                        <Play className="w-4 h-4"/>
+                                    ) : (
+                                        <FileText className="w-4 h-4"/>
+                                    )}
+                                    <span className="text-sm font-medium">{artifact.title || 'Untitled'}</span>
+                                </button>
+                                <VersionSelector artifactId={artifact.id} />
                                 <StatusIndicator isComplete={artifact.isComplete}/>
-                            </button>
+                            </div>
                         ))}
                         <button
                             onClick={() => setShowArtifacts(false)}
@@ -124,19 +227,6 @@ const ArtifactCanvas = ({
                     {/* Artifact Content */}
                     {activeArtifact && artifacts[activeArtifact] && (
                         <div className="flex-1 overflow-auto relative">
-                            {/* Debug info */}
-                            {process.env.NODE_ENV === 'development' && showDebugInfo && (
-                                <div
-                                    className="absolute top-20 right-4 z-10 bg-slate-700 text-xs p-2 rounded text-slate-300 max-w-xs">
-                                    <div>Type: {artifacts[activeArtifact].type}</div>
-                                    <div>Language: {artifacts[activeArtifact].language}</div>
-                                    <div>Version: {artifacts[activeArtifact].version}</div>
-                                    <div>Complete: {artifacts[activeArtifact].isComplete ? 'Yes' : 'No'}</div>
-                                    <div>Content Length: {artifacts[activeArtifact].content?.length || 0}</div>
-                                    <div>Streaming: {streamingContent ? 'Yes' : 'No'}</div>
-                                </div>
-                            )}
-
                             <div className="absolute top-4 right-4 z-10">
                                 <button
                                     onClick={copyToClipboard}
