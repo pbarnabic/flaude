@@ -42,13 +42,15 @@ const ClaudeClone = () => {
     const [modelSettings, setModelSettings] = useState({
         model: 'claude-3-5-haiku-20241022',
         temperature: 1.0,
-        maxTokens: 1000
+        maxTokens: 500
     });
     const [rateLimits, setRateLimits] = useState({});
 
     // Get current artifacts (latest versions for processing)
     const getCurrentArtifacts = () => {
         const artifactVersions = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
+        console.log(streamingContent);
+        console.log(artifactVersions);
         return ArtifactParsingUtils.getLatestArtifacts(artifactVersions);
     };
 

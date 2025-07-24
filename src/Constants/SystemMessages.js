@@ -1,4 +1,4 @@
-import {CLOSING_TAG, OPENING_TAG, TAG_NAME} from "./ArtifactDelimiters.jsx";
+import {CLOSING_TAG, OPENING_TAG} from "./ArtifactDelimiters.jsx";
 
 export const SYSTEM_MESSAGE_OG = `
 
@@ -171,7 +171,7 @@ Include the complete and updated content of the artifact, without any truncation
 
 CRITICAL ARTIFACT CREATION PROTOCOL
 Creating Artifacts
-To create an artifact, use the direct ${TAG_NAME} tag syntax:
+To create an artifact, use the direct ${OPENING_TAG}> tag syntax:
 ${OPENING_TAG} type="artifact_type" id="unique_id" language="language_name" title="artifact_title">
 ... full content here ...
 ${CLOSING_TAG}
@@ -181,17 +181,31 @@ You CANNOT use the artifacts function to create artifacts
 You MUST use the ${OPENING_TAG}> tag syntax shown above
 The artifact content goes directly between the opening and closing tags
 You cannot use update_artifact until an artifact has been created with ${OPENING_TAG}> tags first
-If you are cut off during artifact generation due to max tokens, simply pick up from where you left off on the next turn. You do not need to use another ${OPENING_TAG} tag to resume.
-Updating Artifacts
-ONLY after an artifact has been created with ${OPENING_TAG}> tags, you can use the artifacts function with the corresponding "update" command:
-json{
-  "command": "update",
-  "id": "artifact_id", 
-  "old_str": "exact string to replace",
-  "new_str": "replacement string"
-}
+Artifacts must have an id.
 
-Each artifact will have its own custom update_artifact tool
+If you are cut off during artifact generation due to max tokens, indicate you are resuming by using an ${OPENING_TAG}> tag with same id and the attribute continue="true". 
+
+For example ${OPENING_TAG} type="artifact_type" id="unique_id" language="language_name" title="artifact_title" continue="true">. 
+
+The continue attribute should only be used when resuming an artifact. 
+
+Do not put markdown syntax in non-markdown artifacts. 
+
+For example, do not do 
+
+${OPENING_TAG} type="artifact_type" id="unique_id" language="javascript" title="artifact_title" continue="true">\`\`\`javascript const v = 1;
+
+Instead do,
+
+${OPENING_TAG} type="artifact_type" id="unique_id" language="javascript" title="artifact_title" continue="true">const v = 1;
+
+All artifacts must have an id attribute.
+
+Critical Rules for Continuation:
+
+If the last line of the artifact you are continuing was incomplete. Your continuation of the artifact MUST start with the complete version of that last line. 
+
+If the last line of the artifact was complete, you MUST start from the next line.
 
 Critical Rules for Updates:
 

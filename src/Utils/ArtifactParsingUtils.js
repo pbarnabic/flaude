@@ -4,6 +4,69 @@ import {CLOSING_TAG, OPENING_TAG} from "../Constants/ArtifactDelimiters.jsx";
  * Shared artifact parsing utilities for Messages, ArtifactCanvas, and MobileArtifactsPanel
  */
 export const ArtifactParsingUtils = {
+
+    /**
+     * Find the best overlap between two text segments
+     * Returns the number of characters that overlap
+     */
+    findOverlap: (existing, incoming) => {
+        // Try different overlap lengths, starting from the most likely scenarios
+        const maxOverlap = Math.min(existing.length, incoming.length);
+
+        // First, check for exact continuation (no overlap)
+        if (!incoming.startsWith(existing.slice(-Math.min(100, existing.length)))) {
+            // Not a direct continuation, check for overlaps
+
+            // Try common overlap patterns first (more efficient)
+            const commonLengths = [
+                Math.min(50, maxOverlap),  // Common for partial lines
+                Math.min(100, maxOverlap), // Common for full lines
+                Math.min(200, maxOverlap), // Common for multiple lines
+            ];
+
+            for (const len of commonLengths) {
+                const suffix = existing.slice(-len);
+                if (incoming.startsWith(suffix)) {
+                    return len;
+                }
+            }
+
+            // If no common length worked, do exhaustive search
+            for (let len = Math.min(existing.length, incoming.length); len > 0; len--) {
+                const suffix = existing.slice(-len);
+                if (incoming.startsWith(suffix)) {
+                    return len;
+                }
+            }
+        }
+
+        return 0;
+    },
+
+    /**
+     * Smart content concatenation that handles various LLM behaviors
+     */
+    smartConcat: (existing, incoming) => {
+        // Normalize line endings for consistency
+        existing = existing.replace(/\r\n/g, '\n');
+        incoming = incoming.replace(/\r\n/g, '\n');
+
+        // Find overlap
+        const overlapLength = ArtifactParsingUtils.findOverlap(existing, incoming);
+
+        if (overlapLength > 0) {
+            // Remove the overlapping part from incoming
+            return existing + incoming.slice(overlapLength);
+        }
+
+        // No overlap found - check if we need spacing
+        const needsNewline = existing.length > 0 &&
+            !existing.endsWith('\n') &&
+            !incoming.startsWith('\n');
+
+        return existing + (needsNewline ? '\n' : '') + incoming;
+    },
+
     /**
      * Parse artifacts by extracting complete artifact tags from messages
      * @param {Array} apiMessages - Array of API messages
@@ -37,6 +100,7 @@ export const ArtifactParsingUtils = {
                 const typeMatch = openingTag.match(/type=["']([^"']+)["']/);
                 const languageMatch = openingTag.match(/language=["']([^"']+)["']/);
                 const titleMatch = openingTag.match(/title=["']([^"']+)["']/);
+                const continueMatch = openingTag.match(/continue=["']([^"']+)["']/);
 
                 if (idMatch) {
                     let artifactContent = '';
@@ -44,13 +108,27 @@ export const ArtifactParsingUtils = {
 
                     if (endTag === -1) {
                         // Incomplete artifact - take content from tag end to end of string
-                        // This now handles both streaming AND cut-off messages
                         artifactContent = content.substring(tagEnd + 1);
                         isComplete = false;
                     } else {
                         // Complete artifact
                         artifactContent = content.substring(tagEnd + 1, endTag);
                         isComplete = true;
+                    }
+
+                    // Handle continuation logic with robust concatenation
+                    const isContinuation = continueMatch && continueMatch[1] === 'true';
+                    if (isContinuation && artifactVersions[idMatch[1]]) {
+                        const existingVersions = artifactVersions[idMatch[1]];
+                        const lastVersion = existingVersions[existingVersions.length - 1];
+
+                        if (lastVersion && lastVersion.content) {
+                            // Use smart concatenation
+                            artifactContent = ArtifactParsingUtils.smartConcat(
+                                lastVersion.content,
+                                artifactContent
+                            );
+                        }
                     }
 
                     foundArtifacts[idMatch[1]] = {
@@ -62,7 +140,8 @@ export const ArtifactParsingUtils = {
                         timestamp: Date.now() + messageIndex,
                         messageIndex: messageIndex,
                         isComplete: isComplete,
-                        isStreaming: isStreaming
+                        isStreaming: isStreaming,
+                        isContinuation: isContinuation
                     };
                 }
 
@@ -82,6 +161,8 @@ export const ArtifactParsingUtils = {
                     if (!artifactVersions[artifact.id]) {
                         artifactVersions[artifact.id] = [];
                     }
+
+                    // Always create a new version (continuation logic already handled in extractArtifacts)
                     artifactVersions[artifact.id].push({
                         ...artifact,
                         version: artifactVersions[artifact.id].length + 1
@@ -102,13 +183,13 @@ export const ArtifactParsingUtils = {
                 const versions = artifactVersions[artifact.id];
                 const lastVersion = versions[versions.length - 1];
 
-                if (lastVersion && lastVersion.isStreaming && !lastVersion.isComplete) {
-                    // Update existing streaming version
+                if (lastVersion && lastVersion.isStreaming && !lastVersion.isComplete && !artifact.isContinuation) {
+                    // Update existing streaming version (only if not a continuation)
                     lastVersion.content = artifact.content;
                     lastVersion.isComplete = artifact.isComplete;
                     lastVersion.timestamp = artifact.timestamp;
                 } else {
-                    // Create new version for streaming
+                    // Create new version for streaming (including continuations)
                     versions.push({
                         ...artifact,
                         version: versions.length + 1
