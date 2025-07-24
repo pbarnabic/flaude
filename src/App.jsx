@@ -7,7 +7,7 @@ import ChatInput from "./Components/ChatInput/ChatInput.jsx";
 import Messages from "./Components/Messages/Messages.jsx";
 import ModelSettings from "./Components/ModelSettings/ModelSettings.jsx";
 import {streamClaudeAPI} from "./Requests/AnthropicRequests.js";
-import {OPENING_TAG} from "./Constants/ArtifactDelimiters.jsx";
+import {OPENING_TAG} from "./Constants/ArtifactDelimiters.js";
 import {API_KEY} from "./Constants/ApiKey.js";
 import {processArtifactUpdate} from "./Utils/ToolUtils.js";
 import {ArtifactParsingUtils} from "./Utils/ArtifactParsingUtils.js";

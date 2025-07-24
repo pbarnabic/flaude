@@ -1,4 +1,4 @@
-import {CLOSING_TAG, OPENING_TAG} from "../Constants/ArtifactDelimiters.jsx";
+import {CLOSING_TAG, OPENING_TAG} from "../Constants/ArtifactDelimiters.js";
 
 /**
  * Shared artifact parsing utilities for Messages, ArtifactCanvas, and MobileArtifactsPanel
@@ -148,7 +148,7 @@ export const ArtifactParsingUtils = {
         const artifactVersions = {}; // { artifactId: [version1, version2, ...] }
 
         // Helper to extract artifacts from content
-        const extractArtifacts = (content, messageIndex = -1, isStreaming = false) => {
+        const extractArtifacts = (content, messageIndex = -1, isStreaming = false, existingVersions = artifactVersions) => {
             const foundArtifacts = {};
             let pos = 0;
 
@@ -189,9 +189,9 @@ export const ArtifactParsingUtils = {
 
                     // Handle continuation logic with robust concatenation
                     const isContinuation = continueMatch && continueMatch[1] === 'true';
-                    if (isContinuation && artifactVersions[idMatch[1]]) {
-                        const existingVersions = artifactVersions[idMatch[1]];
-                        const lastVersion = existingVersions[existingVersions.length - 1];
+                    if (isContinuation && existingVersions[idMatch[1]]) {
+                        const versions = existingVersions[idMatch[1]];
+                        const lastVersion = versions[versions.length - 1];
 
                         if (lastVersion && lastVersion.content) {
                             // Use smart concatenation
@@ -225,8 +225,9 @@ export const ArtifactParsingUtils = {
         // Process API messages to build version history
         for (let i = 0; i < apiMessages.length; i++) {
             const apiMsg = apiMessages[i];
+
             if (apiMsg.role === 'assistant' && typeof apiMsg.content === 'string') {
-                const messageArtifacts = extractArtifacts(apiMsg.content, i, false);
+                const messageArtifacts = extractArtifacts(apiMsg.content, i, false, artifactVersions);
 
                 Object.values(messageArtifacts).forEach(artifact => {
                     if (!artifactVersions[artifact.id]) {
@@ -240,11 +241,56 @@ export const ArtifactParsingUtils = {
                     });
                 });
             }
+
+            // Handle tool calls for artifact updates
+            else if (apiMsg.role === 'assistant' && Array.isArray(apiMsg.content)) {
+                for (const content of apiMsg.content) {
+                    if (content.type === 'tool_use' && content.name.startsWith('update_artifact_')) {
+                        const artifactId = content.name.replace('update_artifact_', '');
+                        const { old_str, new_str } = content.input;
+
+                        if (artifactVersions[artifactId]) {
+                            const versions = artifactVersions[artifactId];
+                            const lastVersion = versions[versions.length - 1];
+
+                            if (lastVersion && lastVersion.isComplete) {
+                                // Check if old_str exists in content
+                                if (lastVersion.content.includes(old_str)) {
+                                    // Create updated version
+                                    const updatedContent = lastVersion.content.replace(old_str, new_str);
+                                    versions.push({
+                                        ...lastVersion,
+                                        content: updatedContent,
+                                        version: versions.length + 1,
+                                        timestamp: Date.now() + i,
+                                        messageIndex: i,
+                                        isUpdated: true
+                                    });
+                                } else {
+                                    // Try trimmed match as fallback
+                                    const trimmedOld = old_str.trim();
+                                    if (lastVersion.content.includes(trimmedOld)) {
+                                        const updatedContent = lastVersion.content.replace(trimmedOld, new_str.trim());
+                                        versions.push({
+                                            ...lastVersion,
+                                            content: updatedContent,
+                                            version: versions.length + 1,
+                                            timestamp: Date.now() + i,
+                                            messageIndex: i,
+                                            isUpdated: true
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Process streaming content
         if (streamingContent) {
-            const streamingArtifacts = extractArtifacts(streamingContent, apiMessages.length, true);
+            const streamingArtifacts = extractArtifacts(streamingContent, apiMessages.length, true, artifactVersions);
 
             Object.values(streamingArtifacts).forEach(artifact => {
                 if (!artifactVersions[artifact.id]) {

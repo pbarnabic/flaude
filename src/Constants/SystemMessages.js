@@ -1,4 +1,4 @@
-import {CLOSING_TAG, OPENING_TAG} from "./ArtifactDelimiters.jsx";
+import {CLOSING_TAG, OPENING_TAG} from "./ArtifactDelimiters.js";
 
 export const SYSTEM_MESSAGE_OG = `
 

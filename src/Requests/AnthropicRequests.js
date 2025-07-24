@@ -1,5 +1,5 @@
 import {SYSTEM_MESSAGE} from "../Constants/SystemMessages.js";
-import {BASE_TOOLS} from "../Constants/Tools.jsx";
+import {BASE_TOOLS} from "../Constants/Tools.js";
 import {generateArtifactUpdateTools} from "../Utils/ToolUtils.js";
 
 export const streamClaudeAPI = async (messages, apiKey, modelSettings, existingArtifacts = {}, onChunk) => {
