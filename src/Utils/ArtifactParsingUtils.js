@@ -6,10 +6,71 @@ import {CLOSING_TAG, OPENING_TAG} from "../Constants/ArtifactDelimiters.jsx";
 export const ArtifactParsingUtils = {
 
     /**
+     * Check if a line appears to be incomplete (ends mid-statement)
+     * Language-agnostic approach focusing on common syntax patterns
+     */
+    isLineIncomplete: (line) => {
+        const trimmed = line.trim();
+
+        // Empty lines are complete
+        if (!trimmed) return false;
+
+        // Language-agnostic patterns for incomplete lines
+        const incompletePatterns = [
+            // Operators and punctuation that typically expect continuation
+            /[,=+\-*\/<>!&|%]\s*$/,     // Binary operators at end
+            /\(\s*$/,                    // Opening parenthesis
+            /\[\s*$/,                    // Opening bracket
+            /\{\s*$/,                    // Opening brace
+            /:\s*$/,                     // Colon (Python, labels, etc.)
+            /\\\s*$/,                    // Explicit line continuation
+            /\.\s*$/,                    // Dot (method chaining, property access)
+            /->\s*$/,                    // Arrow (C++, PHP, etc.)
+            /=>\s*$/,                    // Fat arrow (JS, C#, etc.)
+            /::\s*$/,                    // Scope resolution (C++, Rust)
+
+            // Incomplete string literals (odd number of quotes)
+            /^[^"]*("[^"]*"[^"]*)*"[^"]*$/, // Unclosed double quotes
+            /^[^']*('[^']*'[^']*)*'[^']*$/, // Unclosed single quotes
+            /^[^`]*(`[^`]*`[^`]*)*`[^`]*$/, // Unclosed backticks
+        ];
+
+        // Check if line ends with an incomplete pattern
+        if (incompletePatterns.some(pattern => pattern.test(trimmed))) {
+            return true;
+        }
+
+        // Check for unbalanced brackets/parens (more opens than closes)
+        const opens = (trimmed.match(/[\(\[\{]/g) || []).length;
+        const closes = (trimmed.match(/[\)\]\}]/g) || []).length;
+        if (opens > closes) {
+            return true;
+        }
+
+        // Lines ending with certain keywords are often incomplete
+        const incompleteKeywords = /\b(if|else|elif|while|for|with|try|catch|finally|do|then|begin|case|when)\s*$/i;
+        if (incompleteKeywords.test(trimmed)) {
+            return true;
+        }
+
+        return false;
+    },
+
+    /**
      * Find the best overlap between two text segments
      * Returns the number of characters that overlap
      */
     findOverlap: (existing, incoming) => {
+        // Check if the last line of existing content is incomplete
+        const existingLines = existing.split('\n');
+        const lastLine = existingLines[existingLines.length - 1];
+
+        // If the last line looks incomplete, assume continuation rather than overlap
+        if (ArtifactParsingUtils.isLineIncomplete(lastLine)) {
+            // This is likely a continuation, not an overlap
+            return 0;
+        }
+
         // Try different overlap lengths, starting from the most likely scenarios
         const maxOverlap = Math.min(existing.length, incoming.length);
 
@@ -59,7 +120,17 @@ export const ArtifactParsingUtils = {
             return existing + incoming.slice(overlapLength);
         }
 
-        // No overlap found - check if we need spacing
+        // No overlap found - check if this is a mid-statement break
+        const existingLines = existing.split('\n');
+        const lastLine = existingLines[existingLines.length - 1];
+
+        if (ArtifactParsingUtils.isLineIncomplete(lastLine)) {
+            // The last line is incomplete, incoming content likely continues it
+            // Don't add a newline in this case
+            return existing + incoming;
+        }
+
+        // Standard concatenation with newline handling
         const needsNewline = existing.length > 0 &&
             !existing.endsWith('\n') &&
             !incoming.startsWith('\n');
