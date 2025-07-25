@@ -33,7 +33,6 @@ export const generateArtifactUpdateTools = (artifacts) => {
 export const processArtifactUpdate = (toolCall, currentArtifacts) => {
     // Extract artifact ID from tool name (update_artifact_<id>)
     const artifactId = toolCall.name.replace('update_artifact_', '');
-    console.log(artifactId, currentArtifacts);
 
     if (!currentArtifacts[artifactId]) {
         return {

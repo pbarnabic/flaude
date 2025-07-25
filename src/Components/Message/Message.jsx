@@ -6,7 +6,7 @@ const StreamingCursor = () => (
     <span className="inline-block w-2 h-5 bg-blue-500 animate-pulse ml-1 align-text-bottom"></span>
 );
 
-// Simple markdown renderer (keeping the existing one)
+// Simple markdown renderer with overflow fixes
 const MarkdownRenderer = ({content}) => {
     const renderMarkdown = (text) => {
         if (!text) return [];
@@ -62,7 +62,7 @@ const MarkdownRenderer = ({content}) => {
                                 {currentCodeLanguage || 'code'}
                             </div>
                             <pre className="bg-slate-900 rounded-b-lg p-3 overflow-x-auto">
-                                <code className="text-slate-300 text-sm font-mono">
+                                <code className="text-slate-300 text-sm font-mono whitespace-pre">
                                     {currentCodeBlock.join('\n')}
                                 </code>
                             </pre>
@@ -167,13 +167,13 @@ const MarkdownRenderer = ({content}) => {
     };
 
     return (
-        <div className="markdown-content">
+        <div className="markdown-content" style={{wordBreak: 'break-word', overflowWrap: 'anywhere'}}>
             {renderMarkdown(content)}
         </div>
     );
 };
 
-// Message component without fake streaming
+// Message component with overflow fixes
 const Message = ({message, onEditSubmit, isLoading}) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editContent, setEditContent] = useState(message.content);
@@ -206,7 +206,6 @@ const Message = ({message, onEditSubmit, isLoading}) => {
         }
     };
 
-
     if (message.role === 'user' && message?.content instanceof Array) { // we don't render tool calls
         return <></>;
     }
@@ -215,39 +214,41 @@ const Message = ({message, onEditSubmit, isLoading}) => {
     if (message.role === 'user') {
         if (isEditing) {
             return (
-                <div className="flex gap-3 justify-end group">
-                    <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl bg-white border-2 border-blue-300 shadow-sm">
-                        <textarea
-                            value={editContent}
-                            onChange={(e) => setEditContent(e.target.value)}
-                            onKeyDown={handleKeyPress}
-                            className="w-full px-4 py-3 rounded-2xl resize-none text-sm sm:text-base text-slate-800 focus:outline-none"
-                            rows="3"
-                            autoFocus
-                            disabled={isLoading}
-                        />
-                        <div className="flex gap-2 p-3 pt-0">
-                            <button
-                                onClick={handleSaveEdit}
-                                disabled={isLoading || !editContent.trim()}
-                                className="flex items-center gap-1 px-3 py-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white rounded-lg text-sm transition-colors"
-                            >
-                                <Check className="w-4 h-4"/>
-                                Save
-                            </button>
-                            <button
-                                onClick={handleCancelEdit}
+                <div className="flex gap-2 sm:gap-3 justify-end group" style={{width: '100%'}}>
+                    <div style={{flex: '1 1 0', minWidth: 0}}>
+                        <div className="rounded-2xl bg-white border-2 border-blue-300 shadow-sm">
+                            <textarea
+                                value={editContent}
+                                onChange={(e) => setEditContent(e.target.value)}
+                                onKeyDown={handleKeyPress}
+                                className="w-full px-3 py-3 rounded-2xl resize-none text-sm sm:text-base text-slate-800 focus:outline-none"
+                                rows="3"
+                                autoFocus
                                 disabled={isLoading}
-                                className="flex items-center gap-1 px-3 py-1 bg-gray-500 hover:bg-gray-600 disabled:bg-gray-300 text-white rounded-lg text-sm transition-colors"
-                            >
-                                <X className="w-4 h-4"/>
-                                Cancel
-                            </button>
+                                style={{width: '100%'}}
+                            />
+                            <div className="flex gap-2 p-3 pt-0 flex-wrap">
+                                <button
+                                    onClick={handleSaveEdit}
+                                    disabled={isLoading || !editContent.trim()}
+                                    className="flex items-center gap-1 px-3 py-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white rounded-lg text-sm transition-colors"
+                                >
+                                    <Check className="w-4 h-4"/>
+                                    Save
+                                </button>
+                                <button
+                                    onClick={handleCancelEdit}
+                                    disabled={isLoading}
+                                    className="flex items-center gap-1 px-3 py-1 bg-gray-500 hover:bg-gray-600 disabled:bg-gray-300 text-white rounded-lg text-sm transition-colors"
+                                >
+                                    <X className="w-4 h-4"/>
+                                    Cancel
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    <div className="flex-shrink-0">
-                        <div
-                            className="w-8 h-8 bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg flex items-center justify-center shadow-md">
+                    <div style={{flexShrink: 0}}>
+                        <div className="w-8 h-8 bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg flex items-center justify-center shadow-md">
                             <User className="w-5 h-5 text-white"/>
                         </div>
                     </div>
@@ -256,22 +257,23 @@ const Message = ({message, onEditSubmit, isLoading}) => {
         }
 
         return (
-            <div className="flex gap-3 justify-end group">
-                <div
-                    className="max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg relative">
-                    <p className="whitespace-pre-wrap text-sm sm:text-base">{`${message.content}`}</p>
-                    <button
-                        onClick={handleStartEdit}
-                        disabled={isLoading}
-                        className="absolute -left-8 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-white hover:bg-gray-100 disabled:bg-gray-200 rounded-full shadow-md text-gray-600"
-                        title="Edit message"
-                    >
-                        <Edit3 className="w-4 h-4"/>
-                    </button>
+            <div className="flex gap-2 sm:gap-3 justify-end group" style={{width: '100%'}}>
+                <div style={{flex: '1 1 0', minWidth: 0}}>
+                    <div className="rounded-2xl px-3 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg relative"
+                         style={{wordBreak: 'break-word', overflowWrap: 'anywhere'}}>
+                        <p className="whitespace-pre-wrap text-sm sm:text-base">{`${message.content}`}</p>
+                        <button
+                            onClick={handleStartEdit}
+                            disabled={isLoading}
+                            className="absolute -left-6 sm:-left-8 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-white hover:bg-gray-100 disabled:bg-gray-200 rounded-full shadow-md text-gray-600"
+                            title="Edit message"
+                        >
+                            <Edit3 className="w-3 h-3 sm:w-4 sm:h-4"/>
+                        </button>
+                    </div>
                 </div>
-                <div className="flex-shrink-0">
-                    <div
-                        className="w-8 h-8 bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg flex items-center justify-center shadow-md">
+                <div style={{flexShrink: 0}}>
+                    <div className="w-8 h-8 bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg flex items-center justify-center shadow-md">
                         <User className="w-5 h-5 text-white"/>
                     </div>
                 </div>
@@ -281,26 +283,27 @@ const Message = ({message, onEditSubmit, isLoading}) => {
 
     // Assistant message
     return (
-        <div className="flex gap-3 justify-start">
-            <div className="flex-shrink-0">
-                <div
-                    className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
+        <div className="flex gap-2 sm:gap-3 justify-start" style={{width: '100%'}}>
+            <div style={{flexShrink: 0}}>
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
                     <Bot className="w-5 h-5 text-white"/>
                 </div>
             </div>
-            <div
-                className="max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 bg-white border border-slate-200 shadow-sm text-slate-800">
-                <div className="text-sm sm:text-base">
-                    <MarkdownRenderer content={message.content}/>
-                    {message.isStreaming && <StreamingCursor/>}
-                </div>
-                {message.toolCalls && message.toolCalls.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-slate-200">
-                        <p className="text-xs text-slate-500">
-                            🔧 Used {message.toolCalls.length} tool{message.toolCalls.length > 1 ? 's' : ''}
-                        </p>
+            <div style={{flex: '1 1 0', minWidth: 0}}>
+                <div className="rounded-2xl px-3 py-3 bg-white border border-slate-200 shadow-sm text-slate-800"
+                     style={{wordBreak: 'break-word', overflowWrap: 'anywhere'}}>
+                    <div className="text-sm sm:text-base">
+                        <MarkdownRenderer content={message.content}/>
+                        {message.isStreaming && <StreamingCursor/>}
                     </div>
-                )}
+                    {message.toolCalls && message.toolCalls.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                            <p className="text-xs text-slate-500">
+                                🔧 Used {message.toolCalls.length} tool{message.toolCalls.length > 1 ? 's' : ''}
+                            </p>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

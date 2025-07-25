@@ -2,7 +2,7 @@ import React, {useEffect, useRef, useState} from "react";
 import {Check, ChevronDown, Code, Copy, FileText, History, Play, X} from "lucide-react";
 import {ArtifactParsingUtils} from "../../Utils/ArtifactParsingUtils.js";
 
-const MobileArtifactPanel = ({
+const MobileArtifactCanvas = ({
                                  apiMessages = [],
                                  streamingContent = '',
                                  showArtifacts,
@@ -267,4 +267,4 @@ const MobileArtifactPanel = ({
     );
 }
 
-export default MobileArtifactPanel;
+export default MobileArtifactCanvas;
