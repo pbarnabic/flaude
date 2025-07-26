@@ -1,18 +1,18 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
-import { useChats } from '../Contexts/ChatsContext.jsx';
-import { useAuthentication } from '../Contexts/AuthenticationContext.jsx';
-import { ArtifactParsingUtils } from '../Utils/ArtifactParsingUtils.js';
+import React, {useEffect, useRef, useState} from 'react';
+import {useParams, useSearchParams} from 'react-router-dom';
 import ReactPreview from '../Components/ReactPreview/ReactPreview.jsx';
+import {useChats} from '../Contexts/ChatsContext.jsx';
+import {useAuthentication} from '../Contexts/AuthenticationContext.jsx';
+import {ArtifactParsingUtils} from '../Utils/ArtifactParsingUtils.js';
 
 const ArtifactPreviewPage = () => {
-    const { chatId } = useParams();
+    const {chatId} = useParams();
     const [searchParams] = useSearchParams();
     const artifactId = searchParams.get('artifactId');
     const requestedVersion = searchParams.get('version');
 
-    const { isAuthenticated, isLoading: isPasswordLoading } = useAuthentication();
-    const { loadCurrentChat, currentChat, currentMessages, isDatabaseReady } = useChats();
+    const {isAuthenticated, isLoading: isPasswordLoading} = useAuthentication();
+    const {loadCurrentChat, currentChat, currentMessages, isDatabaseReady} = useChats();
 
     const [artifact, setArtifact] = useState(null);
     const [versionToRender, setVersionToRender] = useState(null);
@@ -148,9 +148,12 @@ const ArtifactPreviewPage = () => {
         return (
             <div className="min-h-screen bg-white flex items-center justify-center">
                 <div className="flex items-center gap-3">
-                    <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none"
+                         viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     <span className="text-lg text-gray-600">
                         {isPasswordLoading ? 'Checking authentication...' : 'Waiting for authentication...'}
@@ -164,9 +167,12 @@ const ArtifactPreviewPage = () => {
         return (
             <div className="min-h-screen bg-white flex items-center justify-center">
                 <div className="flex items-center gap-3">
-                    <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none"
+                         viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     <span className="text-lg text-gray-600">Loading artifact...</span>
                 </div>
@@ -215,7 +221,7 @@ const ArtifactPreviewPage = () => {
                         title={artifact.title}
                     />
                 ) : artifact.type === 'application/vnd.ant.react' ? (
-                    <ReactPreview componentCode={versionToRender.content} />
+                    <ReactPreview componentCode={versionToRender.content}/>
                 ) : null}
             </div>
         </div>

@@ -1,12 +1,22 @@
 import React, {createContext, useContext, useEffect, useState} from 'react';
 import {encryptionUtils, hashPassword} from '../Utils/EncryptionUtils.js';
+import {validateUsername, validatePassword} from '../Utils/AuthenticationUtils.js';
+import {
+    getRegisteredUsers,
+    storeUserPasswordHash,
+    getUserPasswordHash,
+    checkUserExists,
+    deleteUserCompletely,
+    testPasswordWithUserData
+} from '../Requests/UserRequests.js';
+import {getUserDatabaseName} from '../Requests/BaseStorageRequests.js';
 
 const AuthenticationContext = createContext();
 
 export const useAuthentication = () => {
     const context = useContext(AuthenticationContext);
     if (!context) {
-        throw new Error('usePassword must be used within a PasswordProvider');
+        throw new Error('useAuthentication must be used within an AuthenticationProvider');
     }
     return context;
 };
@@ -36,189 +46,29 @@ export const AuthenticationProvider = ({ children }) => {
         }
     };
 
-    const getRegisteredUsers = async () => {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('ClaudeChatSystemDB', 1);
-
-            request.onerror = () => {
-                resolve([]); // If no system DB, no users
-            };
-
-            request.onsuccess = () => {
-                const db = request.result;
-                if (!db.objectStoreNames.contains('users')) {
-                    db.close();
-                    resolve([]);
-                    return;
-                }
-
-                const transaction = db.transaction(['users'], 'readonly');
-                const store = transaction.objectStore('users');
-                const getAllRequest = store.getAll();
-
-                getAllRequest.onsuccess = () => {
-                    const userRecords = getAllRequest.result;
-                    const usernames = userRecords.map(record => record.username);
-                    db.close();
-                    resolve(usernames);
-                };
-
-                getAllRequest.onerror = () => {
-                    db.close();
-                    resolve([]);
-                };
-            };
-
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('users')) {
-                    const userStore = db.createObjectStore('users', { keyPath: 'username' });
-                    userStore.createIndex('createdAt', 'createdAt', { unique: false });
-                }
-            };
-        });
-    };
-
-    const storeUserPasswordHash = async (username, passwordHash) => {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('ClaudeChatSystemDB', 1);
-
-            request.onerror = () => reject(request.error);
-
-            request.onsuccess = () => {
-                const db = request.result;
-                const transaction = db.transaction(['users'], 'readwrite');
-                const store = transaction.objectStore('users');
-
-                const userRecord = {
-                    username: username,
-                    passwordHash: passwordHash,
-                    createdAt: new Date().toISOString(),
-                    databaseName: getUserDatabaseName(username)
-                };
-
-                const addRequest = store.put(userRecord);
-                addRequest.onsuccess = () => {
-                    db.close();
-                    resolve();
-                };
-                addRequest.onerror = () => {
-                    db.close();
-                    reject(addRequest.error);
-                };
-            };
-
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('users')) {
-                    const userStore = db.createObjectStore('users', { keyPath: 'username' });
-                    userStore.createIndex('createdAt', 'createdAt', { unique: false });
-                }
-            };
-        });
-    };
-
-    const getUserPasswordHash = async (username) => {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('ClaudeChatSystemDB', 1);
-
-            request.onerror = () => resolve(null);
-
-            request.onsuccess = () => {
-                const db = request.result;
-                if (!db.objectStoreNames.contains('users')) {
-                    db.close();
-                    resolve(null);
-                    return;
-                }
-
-                const transaction = db.transaction(['users'], 'readonly');
-                const store = transaction.objectStore('users');
-                const getRequest = store.get(username);
-
-                getRequest.onsuccess = () => {
-                    const userRecord = getRequest.result;
-                    db.close();
-                    resolve(userRecord ? userRecord.passwordHash : null);
-                };
-
-                getRequest.onerror = () => {
-                    db.close();
-                    resolve(null);
-                };
-            };
-        });
-    };
-
-    const unregisterUser = async (username) => {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('ClaudeChatSystemDB', 1);
-
-            request.onerror = () => resolve(); // If no system DB, consider it done
-
-            request.onsuccess = () => {
-                const db = request.result;
-                if (!db.objectStoreNames.contains('users')) {
-                    db.close();
-                    resolve();
-                    return;
-                }
-
-                const transaction = db.transaction(['users'], 'readwrite');
-                const store = transaction.objectStore('users');
-                const deleteRequest = store.delete(username);
-
-                deleteRequest.onsuccess = () => {
-                    db.close();
-                    resolve();
-                };
-                deleteRequest.onerror = () => {
-                    db.close();
-                    resolve(); // Don't fail if deletion fails
-                };
-            };
-
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('users')) {
-                    const userStore = db.createObjectStore('users', { keyPath: 'username' });
-                    userStore.createIndex('createdAt', 'createdAt', { unique: false });
-                }
-            };
-        });
-    };
-
-    const getUserDatabaseName = (username) => {
-        // Create a safe database name from username
-        const safeUsername = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
-        return `ClaudeChatDB_${safeUsername}`;
-    };
-
-    const checkUserExists = async (username) => {
-        try {
-            const users = await getRegisteredUsers();
-            return users.includes(username);
-        } catch (error) {
-            console.error('Error checking user existence:', error);
-            return false;
-        }
-    };
-
     // Set up password for first time user
     const setupUser = async (username, password) => {
         try {
-            if (!username || username.trim().length < 2) {
-                throw new Error('Username must be at least 2 characters long');
-            }
-
-            if (!password || password.length < 8) {
-                throw new Error('Password must be at least 8 characters long');
+            if (!username || typeof username !== 'string') {
+                throw new Error('Username is required');
             }
 
             const trimmedUsername = username.trim();
+
+            // Validate username using existing utility
+            const usernameError = validateUsername(trimmedUsername);
+            if (usernameError) {
+                throw new Error(usernameError);
+            }
+
+            // Validate password using existing utility
+            const passwordError = validatePassword(password);
+            if (passwordError) {
+                throw new Error(passwordError);
+            }
+
             // Check if user already exists
             const userExists = await checkUserExists(trimmedUsername);
-
             if (userExists) {
                 throw new Error('Username already exists');
             }
@@ -252,7 +102,17 @@ export const AuthenticationProvider = ({ children }) => {
     // Authenticate existing user
     const authenticateUser = async (username, password) => {
         try {
+            if (!username || typeof username !== 'string') {
+                throw new Error('Username is required');
+            }
+
             const trimmedUsername = username.trim();
+
+            // Basic username validation for authentication (less strict than signup)
+            if (trimmedUsername.length < 2) {
+                throw new Error('Username must be at least 2 characters long');
+            }
+
             // Check if user exists in system database
             const userExists = await checkUserExists(trimmedUsername);
             if (!userExists) {
@@ -266,14 +126,13 @@ export const AuthenticationProvider = ({ children }) => {
 
             // Verify password hash
             const passwordHash = await hashPassword(password);
-
             if (passwordHash !== storedHash) {
                 throw new Error('Invalid password');
             }
 
             // Test decryption with actual data if available
             try {
-                const testEncryption = await testPasswordWithUserData(trimmedUsername, password);
+                const testEncryption = await testPasswordWithUserData(trimmedUsername, password, encryptionUtils);
                 if (!testEncryption) {
                     throw new Error('Cannot decrypt existing data with this password');
                 }
@@ -293,63 +152,13 @@ export const AuthenticationProvider = ({ children }) => {
         }
     };
 
-    // Test password against actual encrypted data for a specific user
-    const testPasswordWithUserData = async (username, password) => {
-        try {
-            const dbName = getUserDatabaseName(username);
-            const db = await openUserDatabase(dbName);
-            const transaction = db.transaction(['chats'], 'readonly');
-            const store = transaction.objectStore('chats');
-
-            // Get first chat to test decryption
-            const getAllRequest = store.getAll();
-            const chats = await new Promise((resolve, reject) => {
-                getAllRequest.onsuccess = () => resolve(getAllRequest.result);
-                getAllRequest.onerror = () => reject(getAllRequest.error);
-            });
-
-            db.close();
-
-            if (chats.length > 0) {
-                // Try to decrypt the first chat
-                const firstChat = chats[0];
-                if (firstChat.encrypted_data) {
-                    await encryptionUtils.decrypt(firstChat.encrypted_data, password);
-                    return true;
-                }
-            }
-
-            // If no encrypted chats, password is valid
-            return true;
-        } catch (error) {
-            return false;
-        }
-    };
-
-    const openUserDatabase = (dbName) => {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(dbName, 2);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('chats')) {
-                    const chatStore = db.createObjectStore('chats', { keyPath: 'id' });
-                    chatStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-                    chatStore.createIndex('createdAt', 'createdAt', { unique: false });
-                }
-                if (!db.objectStoreNames.contains('messages')) {
-                    const messageStore = db.createObjectStore('messages', { keyPath: 'id' });
-                    messageStore.createIndex('chatId', 'chatId', { unique: false });
-                    messageStore.createIndex('timestamp', 'timestamp', { unique: false });
-                }
-            };
-        });
-    };
-
     // Delete user and all their data - ONLY current user can delete themselves
     const deleteUser = async (username) => {
         try {
+            if (!username || typeof username !== 'string') {
+                throw new Error('Username is required');
+            }
+
             const trimmedUsername = username.trim();
 
             // Security check: Only authenticated users can delete accounts
@@ -362,17 +171,8 @@ export const AuthenticationProvider = ({ children }) => {
                 throw new Error('You can only delete your own account');
             }
 
-            // Delete user's database
-            const dbName = getUserDatabaseName(trimmedUsername);
-            await new Promise((resolve, reject) => {
-                const deleteRequest = indexedDB.deleteDatabase(dbName);
-                deleteRequest.onsuccess = () => resolve();
-                deleteRequest.onerror = () => reject(deleteRequest.error);
-                deleteRequest.onblocked = () => reject(new Error('Database deletion blocked'));
-            });
-
-            // Remove from system registry
-            await unregisterUser(trimmedUsername);
+            // Delete user and all their data using the modular request
+            await deleteUserCompletely(trimmedUsername);
 
             // Log out the user since they deleted their account
             logout();
@@ -394,8 +194,10 @@ export const AuthenticationProvider = ({ children }) => {
                 throw new Error('Current password is incorrect');
             }
 
-            if (!newPassword || newPassword.length < 8) {
-                throw new Error('New password must be at least 8 characters long');
+            // Validate new password using existing utility
+            const passwordError = validatePassword(newPassword);
+            if (passwordError) {
+                throw new Error(passwordError);
             }
 
             // This would require re-encrypting all user data with new password

@@ -1,5 +1,5 @@
-import React, {useEffect, useState, useRef} from 'react';
-import {useParams, useNavigate} from 'react-router-dom';
+import React, {useEffect, useRef, useState} from 'react';
+import {useNavigate, useParams} from 'react-router-dom';
 import MobileArtifactCanvas from "../MobileArtifactCanvas/MobileArtifactCanvas.jsx";
 import MobileArtifactsViewer from "../MobileArtifactsViewer/MobileArtifactsViewer.jsx";
 import ArtifactsPanel from "../ArtifactPanel/ArtifactsPanel.jsx";
@@ -7,16 +7,16 @@ import Header from "../Header/Header.jsx";
 import ChatInput from "../ChatInput/ChatInput.jsx";
 import Messages from "../Messages/Messages.jsx";
 import ModelSettings from "../ModelSettings/ModelSettings.jsx";
+import SetupApiKey from "../SetupApiKey/SetupApiKey.jsx";
 import {streamClaudeAPI} from "../../Requests/AnthropicRequests.js";
 import {OPENING_TAG} from "../../Constants/ArtifactDelimiters.js";
-import {API_KEY} from "../../Constants/ApiKey.js";
 import {processArtifactUpdate} from "../../Utils/ToolUtils.js";
 import {ArtifactParsingUtils} from "../../Utils/ArtifactParsingUtils.js";
 import {estimateTokens, rateLimiter} from "../../Utils/RateLimitUtils.js";
 import {executeREPL} from "../../Utils/ReplUtils.js";
 import {useChats} from "../../Contexts/ChatsContext.jsx";
 import {useAuthentication} from "../../Contexts/AuthenticationContext.jsx";
-import {getRateLimits, saveRateLimits} from "../../Requests/ChatRequests.js"; // Add these imports
+import {getApiKey, getRateLimits, saveApiKey, saveRateLimits} from "../../Requests/SettingsRequests.js";
 
 const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelSettings}) => {
     const {chatId} = useParams();
@@ -56,7 +56,7 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
     const [waitMessage, setWaitMessage] = useState('');
 
     // Settings
-    const [apiKey, setApiKey] = useState(API_KEY);
+    const [apiKey, setApiKey] = useState('');
     const [showApiKey, setShowApiKey] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showDebugInfo, setShowDebugInfo] = useState(false);
@@ -73,21 +73,45 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
     const saveTimeoutRef = useRef(null);
     const lastSavedMessagesRef = useRef('');
 
-    // Load rate limits on mount when authenticated and database is ready
+    // Load API key and rate limits on mount when authenticated and database is ready
     useEffect(() => {
         if (!isAuthenticated || !isDatabaseReady) return;
 
-        const loadRateLimits = async () => {
+        const loadUserSettings = async () => {
             try {
+                // Load API key
+                const savedApiKey = await getApiKey();
+                if (savedApiKey) {
+                    setApiKey(savedApiKey);
+                }
+
+                // Load rate limits
                 const savedRateLimits = await getRateLimits();
                 setRateLimits(savedRateLimits);
             } catch (error) {
-                console.error('Error loading rate limits:', error);
+                console.error('Error loading user settings:', error);
             }
         };
 
-        loadRateLimits();
+        loadUserSettings();
     }, [isAuthenticated, isDatabaseReady]);
+
+    // Save API key when it changes (debounced)
+    useEffect(() => {
+        if (!isAuthenticated || !isDatabaseReady || !apiKey) return;
+
+        const saveApiKeyDebounced = async () => {
+            try {
+                await saveApiKey(apiKey);
+            } catch (error) {
+                console.error('Error saving API key:', error);
+            }
+        };
+
+        // Debounce saving
+        const timeout = setTimeout(saveApiKeyDebounced, 1000);
+        return () => clearTimeout(timeout);
+    }, [apiKey, isAuthenticated, isDatabaseReady]);
 
     // Save rate limits when they change
     useEffect(() => {
@@ -143,7 +167,7 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
         };
 
         handleChatLoad();
-    }, [chatId, navigate, isAuthenticated, isPasswordLoading, isDatabaseReady]); // Add isDatabaseReady dependency
+    }, [chatId, navigate, isAuthenticated, isPasswordLoading, isDatabaseReady]);
 
     // Auto-save messages when they change
     useEffect(() => {
@@ -174,7 +198,7 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
                 clearTimeout(saveTimeoutRef.current);
             }
         };
-    }, [apiMessages, currentChat, isLoadingCurrentChat, isAuthenticated]); // Add isAuthenticated dependency
+    }, [apiMessages, currentChat, isLoadingCurrentChat, isAuthenticated]);
 
     // Save model settings when they change
     useEffect(() => {
@@ -191,7 +215,7 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
         };
 
         updateChatSettings();
-    }, [modelSettings, currentChat, isLoadingCurrentChat, isAuthenticated]); // Add isAuthenticated dependency
+    }, [modelSettings, currentChat, isLoadingCurrentChat, isAuthenticated]);
 
     // Get current artifacts (latest versions for processing)
     const getCurrentArtifacts = () => {
@@ -476,6 +500,9 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
             </div>
         );
     }
+
+    // Show API key setup if no API key is configured
+    if (!apiKey) return <SetupApiKey apiKey={apiKey} setApiKey={setApiKey}/>;
 
     return (
         <div className="flex h-screen bg-gradient-to-br from-slate-50 to-slate-100 relative">

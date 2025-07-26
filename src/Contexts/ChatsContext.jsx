@@ -4,12 +4,16 @@ import {
     updateChat,
     getChat,
     getAllChats,
-    deleteChat,
-    saveMessages,
-    getMessages,
+    deleteChat
+} from '../Requests/ChatRequests.js';
+import {
+    replaceAllMessagesForChat,
+    getMessagesByChatId
+} from '../Requests/MessageRequests.js';
+import {
     setCurrentUser,
     clearCurrentUser
-} from '../Requests/ChatRequests.js';
+} from '../Auth/UserSessionManager.js';
 import { useAuthentication } from './AuthenticationContext.jsx';
 
 const ChatsContext = createContext();
@@ -47,6 +51,11 @@ export const ChatsProvider = ({ children }) => {
 
                     // Set the current user for the database layer with password context
                     setCurrentUser(currentUsername, passwordCtx);
+
+                    console.log('Setting database ready to true');
+                    console.log('passwordCtx:', passwordCtx);
+                    console.log('Has encryptData:', !!passwordCtx.encryptData);
+                    console.log('Has decryptData:', !!passwordCtx.decryptData);
 
                     setIsDatabaseReady(true);
 
@@ -199,8 +208,13 @@ export const ChatsProvider = ({ children }) => {
             setCurrentChat(chat);
 
             // Load messages
-            const messages = await getMessages(chatId);
-            setCurrentMessages(messages);
+            const messages = await getMessagesByChatId(chatId);
+            // Convert to the format expected by the existing code
+            const formattedMessages = messages.map(msg => ({
+                role: msg.role,
+                content: msg.content
+            }));
+            setCurrentMessages(formattedMessages);
 
             return chat;
         } catch (error) {
@@ -224,7 +238,7 @@ export const ChatsProvider = ({ children }) => {
         // Auto-save with debouncing handled by the component
         if (currentChat) {
             try {
-                return await saveMessages(currentChat.id, messages);
+                return await replaceAllMessagesForChat(currentChat.id, messages);
             } catch (error) {
                 console.error('Error saving messages:', error);
                 throw error;
@@ -242,7 +256,7 @@ export const ChatsProvider = ({ children }) => {
 
         if (currentChat) {
             try {
-                await saveMessages(currentChat.id, []);
+                await replaceAllMessagesForChat(currentChat.id, []);
             } catch (error) {
                 console.error('Error clearing messages:', error);
                 throw error;

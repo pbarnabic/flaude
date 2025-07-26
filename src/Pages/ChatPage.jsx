@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
-import {useAuthentication} from "../Contexts/AuthenticationContext.jsx";
-import ChatSidebar from "../Components/ChatSidebar/ChatSidebar.jsx";
 import Chat from "../Components/Chat/Chat.jsx";
+import ChatSidebar from "../Components/ChatSidebar/ChatSidebar.jsx";
+import {useAuthentication} from "../Contexts/AuthenticationContext.jsx";
 
 const ChatPage = () => {
     const {isAuthenticated} = useAuthentication();
