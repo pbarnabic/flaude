@@ -1,19 +1,17 @@
+import React, {createContext, useContext, useEffect, useState} from 'react';
+import {encryptionUtils, hashPassword} from '../Utils/EncryptionUtils.js';
 
-// /Contexts/PasswordContext.jsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { encryptionUtils, hashPassword } from '../Utils/EncryptionUtils.js';
+const AuthenticationContext = createContext();
 
-const PasswordContext = createContext();
-
-export const usePassword = () => {
-    const context = useContext(PasswordContext);
+export const useAuthentication = () => {
+    const context = useContext(AuthenticationContext);
     if (!context) {
         throw new Error('usePassword must be used within a PasswordProvider');
     }
     return context;
 };
 
-export const PasswordProvider = ({ children }) => {
+export const AuthenticationProvider = ({ children }) => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [currentPassword, setCurrentPassword] = useState(null);
     const [currentUsername, setCurrentUsername] = useState(null);
@@ -464,8 +462,8 @@ export const PasswordProvider = ({ children }) => {
     };
 
     return (
-        <PasswordContext.Provider value={contextValue}>
+        <AuthenticationContext.Provider value={contextValue}>
             {children}
-        </PasswordContext.Provider>
+        </AuthenticationContext.Provider>
     );
 };

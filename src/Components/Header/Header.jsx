@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { Eye, EyeOff, Key, Menu, Sparkles, Trash2, Code, Settings, MessageSquare, Edit2, Check, X } from "lucide-react";
-import { MODELS } from "../../Constants/Models.js";
-import { useChats } from "../../Contexts/ChatsContext.jsx";
+import React, {useState} from "react";
+import {Eye, EyeOff, Key, Menu, Sparkles, Trash2, Code, Settings, MessageSquare, Edit2, Check, X} from "lucide-react";
+import {MODELS} from "../../Constants/Models.js";
+import {useChats} from "../../Contexts/ChatsContext.jsx";
 
 const Header = ({
                     showApiKey,
@@ -19,7 +19,7 @@ const Header = ({
                     showChatSidebar,
                     setShowChatSidebar
                 }) => {
-    const { currentChat, updateChatById } = useChats();
+    const {currentChat, updateChatById} = useChats();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editTitle, setEditTitle] = useState('');
 
@@ -37,7 +37,7 @@ const Header = ({
         }
 
         try {
-            await updateChatById(currentChat.id, { title: editTitle.trim() });
+            await updateChatById(currentChat.id, {title: editTitle.trim()});
             setIsEditingTitle(false);
         } catch (error) {
             console.error('Error updating chat title:', error);

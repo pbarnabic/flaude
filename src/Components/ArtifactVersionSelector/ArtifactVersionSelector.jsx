@@ -7,12 +7,8 @@ const ArtifactVersionSelector = ({
                                      selectedVersion,
                                      setShowVersionDropdown
                                  }) => {
-    // const artifact = artifacts[artifactId];
-    // const versions = artifactVersions[artifactId] || [];
-
     if (!artifact || versions.length <= 1) return null;
 
-    // const selectedVersion = selectedVersions[artifactId] || versions.length;
     const isLatest = selectedVersion === versions.length;
 
     return (

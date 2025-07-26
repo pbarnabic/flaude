@@ -2,15 +2,15 @@ import React from 'react';
 import {BrowserRouter as Router, Navigate, Route, Routes} from 'react-router-dom';
 import ChatPage from "./Pages/ChatPage.jsx";
 import ArtifactPreviewPage from "./Pages/ArtifactPreviewPage.jsx";
-import PasswordModal from './Components/PasswordModal/PasswordModal.jsx';
+import AuthenticationModal from './Components/AuthenticationModal/AuthenticationModal.jsx';
 import {ChatsProvider} from './Contexts/ChatsContext.jsx';
-import {PasswordProvider, usePassword} from './Contexts/PasswordContext.jsx';
+import {AuthenticationProvider, useAuthentication} from './Contexts/AuthenticationContext.jsx';
 
 const AuthenticatedApp = () => {
-    const {isAuthenticated} = usePassword();
+    const {isAuthenticated} = useAuthentication();
     return (
         <>
-            <PasswordModal/>
+            <AuthenticationModal/>
             {isAuthenticated && (
                 <ChatsProvider>
                     <Routes>
@@ -38,9 +38,9 @@ const AuthenticatedApp = () => {
 const App = () => {
     return (
         <Router>
-            <PasswordProvider>
+            <AuthenticationProvider>
                 <AuthenticatedApp/>
-            </PasswordProvider>
+            </AuthenticationProvider>
         </Router>
     );
 };

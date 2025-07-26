@@ -1,4 +1,3 @@
-// /Contexts/ChatsContext.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
     createChat,
@@ -11,7 +10,7 @@ import {
     setCurrentUser,
     clearCurrentUser
 } from '../Requests/ChatRequests.js';
-import { usePassword } from './PasswordContext.jsx';
+import { useAuthentication } from './AuthenticationContext.jsx';
 
 const ChatsContext = createContext();
 
@@ -24,7 +23,7 @@ export const useChats = () => {
 };
 
 export const ChatsProvider = ({ children }) => {
-    const passwordCtx = usePassword();
+    const passwordCtx = useAuthentication();
     const { isAuthenticated, currentUsername, isLoading: isPasswordLoading } = passwordCtx;
 
     // Chat list state

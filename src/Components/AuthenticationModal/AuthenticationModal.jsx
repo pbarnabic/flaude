@@ -1,9 +1,10 @@
-// ./Components/PasswordModal/PasswordModal.jsx
 import React, {useState, useEffect} from 'react';
 import {Eye, EyeOff, Lock, Shield, AlertCircle, CheckCircle, User, Users, Trash2, UserPlus} from 'lucide-react';
-import {usePassword} from '../../Contexts/PasswordContext.jsx';
+import {useAuthentication} from '../../Contexts/AuthenticationContext.jsx';
+import {validateUsername, validatePassword} from "../../Utils/AuthenticationUtils.js";
+import UsernameSelector from "../UsernameSelector/UsernameSelector.jsx";
 
-const PasswordModal = () => {
+const AuthenticationModal = () => {
     const {
         isAuthenticated,
         isLoading,
@@ -13,7 +14,7 @@ const PasswordModal = () => {
         authenticateUser,
         deleteUser,
         switchUser
-    } = usePassword();
+    } = useAuthentication();
 
     const [mode, setMode] = useState('select'); // 'select', 'login', 'signup'
     const [selectedUser, setSelectedUser] = useState('');
@@ -36,32 +37,6 @@ const PasswordModal = () => {
             }
         }
     }, [isLoading, existingUsers]);
-
-    const validateUsername = (user) => {
-        if (user.length < 2) {
-            return 'Username must be at least 2 characters long';
-        }
-        if (!/^[a-zA-Z0-9_-]+$/.test(user)) {
-            return 'Username can only contain letters, numbers, hyphens, and underscores';
-        }
-        return '';
-    };
-
-    const validatePassword = (pwd) => {
-        if (pwd.length < 8) {
-            return 'Password must be at least 8 characters long';
-        }
-        if (!/(?=.*[a-z])/.test(pwd)) {
-            return 'Password must contain at least one lowercase letter';
-        }
-        if (!/(?=.*[A-Z])/.test(pwd)) {
-            return 'Password must contain at least one uppercase letter';
-        }
-        if (!/(?=.*\d)/.test(pwd)) {
-            return 'Password must contain at least one number';
-        }
-        return '';
-    };
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -176,47 +151,13 @@ const PasswordModal = () => {
 
                 {/* User Selection Mode */}
                 {mode === 'select' && (
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Existing Users
-                            </label>
-                            <div className="space-y-2 max-h-40 overflow-y-auto">
-                                {existingUsers.map((user) => (
-                                    <div
-                                        key={user}
-                                        className={`p-3 border rounded-lg cursor-pointer transition-colors flex items-center justify-between ${
-                                            selectedUser === user
-                                                ? 'border-blue-500 bg-blue-50'
-                                                : 'border-gray-200 hover:border-gray-300'
-                                        }`}
-                                        onClick={() => setSelectedUser(user)}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <User className="w-4 h-4 text-gray-500"/>
-                                            <span className="font-medium">{user}</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => selectedUser && setMode('login')}
-                                disabled={!selectedUser || isSubmitting}
-                                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                            >
-                                Sign In
-                            </button>
-                            <button
-                                onClick={() => setMode('signup')}
-                                className="flex-1 border border-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium hover:bg-gray-50 transition-all"
-                            >
-                                New User
-                            </button>
-                        </div>
-                    </div>
+                    <UsernameSelector
+                        existingUsers={existingUsers}
+                        selectedUser={selectedUser}
+                        setSelectedUser={setSelectedUser}
+                        setMode={setMode}
+                        isSubmitting={isSubmitting}
+                    />
                 )}
 
                 {/* Login Mode */}
@@ -475,4 +416,4 @@ const PasswordModal = () => {
     );
 };
 
-export default PasswordModal;
+export default AuthenticationModal;

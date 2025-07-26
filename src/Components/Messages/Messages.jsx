@@ -1,4 +1,3 @@
-
 import React, {useEffect, useRef} from "react";
 import {Bot, Code, FileText, Package, Sparkles, Terminal, Palette} from "lucide-react";
 import Message from "../Message/Message.jsx";

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useChats } from '../Contexts/ChatsContext.jsx';
-import { usePassword } from '../Contexts/PasswordContext.jsx';
+import { useAuthentication } from '../Contexts/AuthenticationContext.jsx';
 import { ArtifactParsingUtils } from '../Utils/ArtifactParsingUtils.js';
 import ReactPreview from '../Components/ReactPreview/ReactPreview.jsx';
 
@@ -11,7 +11,7 @@ const ArtifactPreviewPage = () => {
     const artifactId = searchParams.get('artifactId');
     const requestedVersion = searchParams.get('version');
 
-    const { isAuthenticated, isLoading: isPasswordLoading } = usePassword();
+    const { isAuthenticated, isLoading: isPasswordLoading } = useAuthentication();
     const { loadCurrentChat, currentChat, currentMessages, isDatabaseReady } = useChats();
 
     const [artifact, setArtifact] = useState(null);

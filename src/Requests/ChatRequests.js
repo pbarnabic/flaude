@@ -1,6 +1,3 @@
-// ./Requests/ChatRequests.js
-import { encryptionUtils } from '../Utils/EncryptionUtils.js';
-
 // User-specific database management
 let currentUsername = null;
 let passwordContext = null;
@@ -63,6 +60,10 @@ class UserChatDatabase {
                     messageStore.createIndex('timestamp', 'timestamp', { unique: false });
                 }
 
+                // Create settings store for user preferences
+                if (!db.objectStoreNames.contains('settings')) {
+                    const settingsStore = db.createObjectStore('settings', { keyPath: 'key' });
+                }
             };
         });
     }
@@ -90,6 +91,58 @@ const decryptFromStorage = async (encryptedData) => {
         throw new Error('No decryption context available - user not authenticated');
     }
     return await passwordContext.decryptData(encryptedData);
+};
+
+// Rate Limits Operations
+export const saveRateLimits = async (rateLimits) => {
+    await chatDB.ensureInitialized();
+
+    try {
+        const encryptedData = await encryptForStorage(rateLimits);
+        const settingRecord = {
+            key: 'rateLimits',
+            encrypted_data: encryptedData,
+            updatedAt: new Date().toISOString()
+        };
+
+        return new Promise((resolve, reject) => {
+            const transaction = chatDB.db.transaction(['settings'], 'readwrite');
+            const store = transaction.objectStore('settings');
+            const request = store.put(settingRecord);
+
+            request.onsuccess = () => resolve(rateLimits);
+            request.onerror = () => reject(request.error);
+        });
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const getRateLimits = async () => {
+    await chatDB.ensureInitialized();
+
+    return new Promise((resolve, reject) => {
+        const transaction = chatDB.db.transaction(['settings'], 'readonly');
+        const store = transaction.objectStore('settings');
+        const request = store.get('rateLimits');
+
+        request.onsuccess = async () => {
+            const settingRecord = request.result;
+            if (!settingRecord) {
+                resolve({});
+                return;
+            }
+
+            try {
+                const decryptedRateLimits = await decryptFromStorage(settingRecord.encrypted_data);
+                resolve(decryptedRateLimits);
+            } catch (decryptError) {
+                console.error('Failed to decrypt rate limits:', decryptError);
+                resolve({});
+            }
+        };
+        request.onerror = () => reject(request.error);
+    });
 };
 
 // Chat Operations

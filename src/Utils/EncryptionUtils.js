@@ -1,4 +1,3 @@
-// ./Utils/EncryptionUtils.js
 class EncryptionUtils {
     constructor() {
         this.algorithm = 'AES-GCM';

@@ -1,10 +1,10 @@
 import React, {useState} from 'react';
-import {usePassword} from "../Contexts/PasswordContext.jsx";
+import {useAuthentication} from "../Contexts/AuthenticationContext.jsx";
 import ChatSidebar from "../Components/ChatSidebar/ChatSidebar.jsx";
 import Chat from "../Components/Chat/Chat.jsx";
 
 const ChatPage = () => {
-    const {isAuthenticated} = usePassword();
+    const {isAuthenticated} = useAuthentication();
     const [showChatSidebar, setShowChatSidebar] = useState(window.innerWidth >= 1024);
     const [modelSettings] = useState({
         model: 'claude-sonnet-4-20250514',

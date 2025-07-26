@@ -15,14 +15,15 @@ import {ArtifactParsingUtils} from "../../Utils/ArtifactParsingUtils.js";
 import {estimateTokens, rateLimiter} from "../../Utils/RateLimitUtils.js";
 import {executeREPL} from "../../Utils/ReplUtils.js";
 import {useChats} from "../../Contexts/ChatsContext.jsx";
-import {usePassword} from "../../Contexts/PasswordContext.jsx"; // Add this import
+import {useAuthentication} from "../../Contexts/AuthenticationContext.jsx";
+import {getRateLimits, saveRateLimits} from "../../Requests/ChatRequests.js"; // Add these imports
 
 const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelSettings}) => {
     const {chatId} = useParams();
     const navigate = useNavigate();
 
     // Add password context to check authentication state
-    const {isAuthenticated, isLoading: isPasswordLoading} = usePassword();
+    const {isAuthenticated, isLoading: isPasswordLoading} = useAuthentication();
 
     const {
         currentChat,
@@ -71,6 +72,39 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
     // Auto-save ref to prevent excessive saves
     const saveTimeoutRef = useRef(null);
     const lastSavedMessagesRef = useRef('');
+
+    // Load rate limits on mount when authenticated and database is ready
+    useEffect(() => {
+        if (!isAuthenticated || !isDatabaseReady) return;
+
+        const loadRateLimits = async () => {
+            try {
+                const savedRateLimits = await getRateLimits();
+                setRateLimits(savedRateLimits);
+            } catch (error) {
+                console.error('Error loading rate limits:', error);
+            }
+        };
+
+        loadRateLimits();
+    }, [isAuthenticated, isDatabaseReady]);
+
+    // Save rate limits when they change
+    useEffect(() => {
+        if (!isAuthenticated || !isDatabaseReady || Object.keys(rateLimits).length === 0) return;
+
+        const saveRateLimitsDebounced = async () => {
+            try {
+                await saveRateLimits(rateLimits);
+            } catch (error) {
+                console.error('Error saving rate limits:', error);
+            }
+        };
+
+        // Debounce saving
+        const timeout = setTimeout(saveRateLimitsDebounced, 500);
+        return () => clearTimeout(timeout);
+    }, [rateLimits, isAuthenticated, isDatabaseReady]);
 
     // Load chat on mount or chatId change - but only after authentication is complete
     useEffect(() => {
@@ -555,6 +589,8 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
                     <pre className="text-xs">{JSON.stringify(apiMessages, null, 2)}</pre>
                     <h3 className="font-bold mb-2 mt-4">Current Artifacts</h3>
                     <pre className="text-xs">{JSON.stringify(getCurrentArtifacts(), null, 2)}</pre>
+                    <h3 className="font-bold mb-2 mt-4">Rate Limits</h3>
+                    <pre className="text-xs">{JSON.stringify(rateLimits, null, 2)}</pre>
                 </div>
             )}
         </div>
