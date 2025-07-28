@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Check, Copy, Code, Eye, ExternalLink } from "lucide-react";
-import { useParams } from "react-router-dom";
-import { ArtifactParsingUtilsV2 } from "../../Utils/ArtifactParsingUtilsV2.js";
+import React, {useEffect, useRef, useState} from "react";
+import {Check, Copy, Code, Eye, ExternalLink} from "lucide-react";
+import {useParams} from "react-router-dom";
+import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
 import ReactPreview from "../ReactPreview/ReactPreview.jsx";
 
-const ArtifactCanvas = ({ activeArtifact, artifacts, selectedVersions, artifactVersions }) => {
-    const { chatId } = useParams();
+const ArtifactCanvas = ({activeArtifact, artifacts, selectedVersions, artifactVersions}) => {
+    const {chatId} = useParams();
     const codeRef = useRef(null);
     const codeContainerRef = useRef(null);
     const [copied, setCopied] = useState(false);
@@ -102,7 +102,7 @@ const ArtifactCanvas = ({ activeArtifact, artifacts, selectedVersions, artifactV
     if (!artifact || !versionToRender) return null;
 
     return (
-        <div className="h-full overflow-auto relative bg-white" style={{ height: 'calc(100vh - 120px)' }}>
+        <div className="h-full overflow-auto relative bg-white" style={{height: 'calc(100vh - 120px)'}}>
             <div className="absolute top-4 right-4 z-10 flex gap-2">
                 {/* Auto-scroll toggle - only show when in code view */}
                 {shouldShowCode && (
@@ -120,24 +120,28 @@ const ArtifactCanvas = ({ activeArtifact, artifacts, selectedVersions, artifactV
 
                 {supportsPreview && (
                     <>
-                        <button onClick={togglePreview} className="bg-white/90 backdrop-blur text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-white hover:shadow-md transition-all shadow border border-slate-200">
-                            {showPreview ? <Code className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        <button onClick={togglePreview}
+                                className="bg-white/90 backdrop-blur text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-white hover:shadow-md transition-all shadow border border-slate-200">
+                            {showPreview ? <Code className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
                             <span className="text-sm font-medium">{showPreview ? 'Code' : 'Preview'}</span>
                         </button>
-                        <button onClick={openInNewTab} className="bg-white/90 backdrop-blur text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-white hover:shadow-md transition-all shadow border border-slate-200">
-                            <ExternalLink className="w-4 h-4" />
+                        <button onClick={openInNewTab}
+                                className="bg-white/90 backdrop-blur text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-white hover:shadow-md transition-all shadow border border-slate-200">
+                            <ExternalLink className="w-4 h-4"/>
                             <span className="text-sm font-medium">Open in Tab</span>
                         </button>
                     </>
                 )}
                 {!supportsPreview && (
-                    <button onClick={togglePreview} className="bg-white/90 backdrop-blur text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-white hover:shadow-md transition-all shadow border border-slate-200">
-                        {showPreview ? <Code className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    <button onClick={togglePreview}
+                            className="bg-white/90 backdrop-blur text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-white hover:shadow-md transition-all shadow border border-slate-200">
+                        {showPreview ? <Code className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
                         <span className="text-sm font-medium">{showPreview ? 'Code' : 'Preview'}</span>
                     </button>
                 )}
-                <button onClick={copyToClipboard} className="bg-white/90 backdrop-blur text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-white hover:shadow-md transition-all shadow border border-slate-200">
-                    {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                <button onClick={copyToClipboard}
+                        className="bg-white/90 backdrop-blur text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-white hover:shadow-md transition-all shadow border border-slate-200">
+                    {copied ? <Check className="w-4 h-4 text-green-600"/> : <Copy className="w-4 h-4"/>}
                     <span className="text-sm font-medium">{copied ? 'Copied!' : 'Copy'}</span>
                 </button>
             </div>
@@ -145,6 +149,7 @@ const ArtifactCanvas = ({ activeArtifact, artifacts, selectedVersions, artifactV
             {shouldShowCode ? (
                 <pre ref={codeContainerRef} className="p-6 text-sm font-mono h-full overflow-auto bg-slate-50">
                     <code
+                        style={{userSelect: 'text'}} // allows selection of only parts of the code
                         ref={codeRef}
                         key={`${activeArtifact}-${artifact.version}-${showPreview}`}
                         className={`language-${ArtifactParsingUtilsV2.getLanguageFromType(artifacts[activeArtifact])}`}
@@ -159,7 +164,7 @@ const ArtifactCanvas = ({ activeArtifact, artifacts, selectedVersions, artifactV
                     sandbox="allow-scripts"
                 />
             ) : artifact.type === 'application/vnd.ant.react' ? (
-                <ReactPreview componentCode={versionToRender?.content} />
+                <ReactPreview componentCode={versionToRender?.content}/>
             ) : (
                 <div className="p-6 text-slate-700 text-sm h-full overflow-auto whitespace-pre-wrap">
                     {versionToRender.content || ''}
