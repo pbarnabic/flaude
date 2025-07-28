@@ -8,22 +8,26 @@ import ChatInput from "../ChatInput/ChatInput.jsx";
 import Messages from "../Messages/Messages.jsx";
 import ModelSettings from "../ModelSettings/ModelSettings.jsx";
 import SetupApiKey from "../SetupApiKey/SetupApiKey.jsx";
-import {streamClaudeAPI} from "../../Requests/AnthropicRequests.js";
-import {OPENING_TAG} from "../../Constants/ArtifactDelimiters.js";
+import RateLimitWaitingIndicator from "../RateLimitWaitingIndicator/RateLimitWaitingIndicator.jsx";
+import DebugPanel from "../DebugPanel/DebugPanel.jsx";
+import ChatLoading from "../ChatLoading/ChatLoading.jsx";
+import {useChats} from "../../Contexts/ChatsContext.jsx";
+import {useAuthentication} from "../../Contexts/AuthenticationContext.jsx";
+import {getApiKey, getRateLimits, putApiKey, putRateLimits} from "../../Requests/SettingsRequests.js";
+import {streamClaudeAPI, callClaudeAPI} from "../../Requests/AnthropicRequests.js";
 import {processArtifactUpdate} from "../../Utils/ToolUtils.js";
 import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
 import {estimateTokens, rateLimiter} from "../../Utils/RateLimitUtils.js";
 import {executeREPL} from "../../Utils/ReplUtils.js";
-import {useChats} from "../../Contexts/ChatsContext.jsx";
-import {useAuthentication} from "../../Contexts/AuthenticationContext.jsx";
-import {getApiKey, getRateLimits, putApiKey, putRateLimits} from "../../Requests/SettingsRequests.js";
 import {ImageUtils} from "../../Utils/ImageUtils.js";
+import {NAME_CHAT_TOOL} from "../../Constants/Tools.js";
+import {OPENING_TAG} from "../../Constants/ArtifactDelimiters.js";
 
 const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelSettings}) => {
     const {chatId} = useParams();
     const navigate = useNavigate();
 
-    // Add password context to check authentication state
+    // Contexts
     const {isAuthenticated, isLoading: isPasswordLoading} = useAuthentication();
 
     const {
@@ -55,7 +59,7 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
 
     // Rate Limiting UI State
     const [isWaiting, setIsWaiting] = useState(false);
-    const [waitMessage, setWaitMessage] = useState('');
+    const [waitingMessage, setWaitingMessage] = useState('');
 
     // Settings
     const [apiKey, setApiKey] = useState('');
@@ -268,14 +272,14 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
 
         if (waitTime > 0) {
             setIsWaiting(true);
-            setWaitMessage(`Rate limit approaching. Waiting ${Math.ceil(waitTime / 1000)} seconds...`);
+            setWaitingMessage(`Rate limit approaching. Waiting ${Math.ceil(waitTime / 1000)} seconds...`);
             await rateLimiter.waitIfNeeded(
                 modelSettings.model,
                 estimatedInputTokens,
                 rateLimits[modelSettings.model]
             );
             setIsWaiting(false);
-            setWaitMessage('');
+            setWaitingMessage('');
         }
 
         // Initialize streaming
@@ -466,7 +470,6 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
     };
 
 
-
     const handleClear = async () => {
         if (!isAuthenticated) return;
 
@@ -537,23 +540,11 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
     // Show loading state while password/authentication is being checked or chat is being loaded
     if (isPasswordLoading || !isAuthenticated || !isDatabaseReady || isLoadingCurrentChat) {
         return (
-            <div className="flex h-screen bg-gradient-to-br from-slate-50 to-slate-100 items-center justify-center">
-                <div className="flex items-center gap-3">
-                    <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none"
-                         viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span className="text-lg text-gray-600">
-                        {isPasswordLoading ? 'Checking authentication...' :
-                            !isAuthenticated ? 'Waiting for authentication...' :
-                                !isDatabaseReady ? 'Setting up database...' :
-                                    'Loading chat...'}
-                    </span>
-                </div>
-            </div>
+            <ChatLoading
+                isPasswordLoading={isPasswordLoading}
+                isAuthenticated={isAuthenticated}
+                isDatabaseReady={isDatabaseReady}
+            />
         );
     }
 
@@ -612,17 +603,7 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
 
                 {/* Rate Limit Waiting Indicator */}
                 {isWaiting && (
-                    <div
-                        className="mx-4 mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
-                        <svg className="animate-spin h-4 w-4 text-amber-600" xmlns="http://www.w3.org/2000/svg"
-                             fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                    strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor"
-                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span className="text-sm text-amber-700">{waitMessage}</span>
-                    </div>
+                    <RateLimitWaitingIndicator waitingMessage={waitingMessage}/>
                 )}
 
                 <ChatInput
@@ -666,19 +647,13 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
                 />
             )}
 
-            {/* Debug Panel */}
             {showDebugInfo && (
-                <div
-                    className="fixed bottom-20 right-4 max-w-md max-h-96 overflow-auto bg-gray-900 text-white p-4 rounded-lg shadow-lg">
-                    <h3 className="font-bold mb-2">Current Chat</h3>
-                    <pre className="text-xs">{JSON.stringify(currentChat, null, 2)}</pre>
-                    <h3 className="font-bold mb-2 mt-4">API Messages</h3>
-                    <pre className="text-xs">{JSON.stringify(apiMessages, null, 2)}</pre>
-                    <h3 className="font-bold mb-2 mt-4">Current Artifacts</h3>
-                    <pre className="text-xs">{JSON.stringify(getCurrentArtifacts(), null, 2)}</pre>
-                    <h3 className="font-bold mb-2 mt-4">Rate Limits</h3>
-                    <pre className="text-xs">{JSON.stringify(rateLimits, null, 2)}</pre>
-                </div>
+                <DebugPanel
+                    currentChatStr={JSON.stringify(currentChat, null, 2)}
+                    apiMessagesStr={JSON.stringify(apiMessages, null, 2)}
+                    currentArtifactsStr={JSON.stringify(getCurrentArtifacts(), null, 2)}
+                    rateLimitsStr={JSON.stringify(rateLimits, null, 2)}
+                />
             )}
         </div>
     );

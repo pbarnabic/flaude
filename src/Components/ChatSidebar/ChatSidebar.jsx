@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useChats } from '../../Contexts/ChatsContext.jsx';
-import { Plus, MessageSquare, Trash2, Edit2, X, Check, Loader } from 'lucide-react';
+import React, {useState} from 'react';
+import {useNavigate, useParams} from 'react-router-dom';
+import {useChats} from '../../Contexts/ChatsContext.jsx';
+import {Plus, MessageSquare, Trash2, Edit2, X, Check, Loader} from 'lucide-react';
 
-const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
+const ChatSidebar = ({isOpen, onClose, modelSettings}) => {
     const {
         allChats,
         isLoadingChats,
@@ -16,11 +16,11 @@ const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
     const [editingChatId, setEditingChatId] = useState(null);
     const [editTitle, setEditTitle] = useState('');
     const navigate = useNavigate();
-    const { chatId } = useParams();
+    const {chatId} = useParams();
 
     const handleNewChat = async () => {
         try {
-            const newChat = await createNewChat({ modelSettings });
+            const newChat = await createNewChat({modelSettings});
             navigate(`/chats/${newChat.id}`);
             if (window.innerWidth < 768) {
                 onClose();
@@ -84,7 +84,7 @@ const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
         }
 
         try {
-            await updateChatById(editingChatId, { title: editTitle.trim() });
+            await updateChatById(editingChatId, {title: editTitle.trim()});
             setEditingChatId(null);
             setEditTitle('');
         } catch (error) {
@@ -116,13 +116,13 @@ const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
         const chatDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
         if (chatDate.getTime() === today.getTime()) {
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
         } else if (chatDate.getTime() === yesterday.getTime()) {
             return 'Yesterday';
         } else if (now - date < 7 * 24 * 60 * 60 * 1000) {
-            return date.toLocaleDateString([], { weekday: 'short' });
+            return date.toLocaleDateString([], {weekday: 'short'});
         } else {
-            return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            return date.toLocaleDateString([], {month: 'short', day: 'numeric'});
         }
     };
 
@@ -147,7 +147,8 @@ const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
                 ${isOpen ? 'translate-x-0' : '-translate-x-full'}
             `}>
                 {/* Glass overlay effect */}
-                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-blue-500/10 pointer-events-none" />
+                <div
+                    className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-blue-500/10 pointer-events-none"/>
 
                 {/* Header */}
                 <div className="relative p-4 border-b border-white/10 flex-shrink-0">
@@ -158,7 +159,7 @@ const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
                             className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
                             title={window.innerWidth >= 1024 ? "Collapse sidebar" : "Close"}
                         >
-                            <X className="w-5 h-5 text-gray-400 hover:text-white" />
+                            <X className="w-5 h-5 text-gray-400 hover:text-white"/>
                         </button>
                     </div>
 
@@ -171,7 +172,7 @@ const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
                             transition-all duration-200 transform hover:scale-[1.02]
                             shadow-lg shadow-purple-500/20"
                     >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-4 h-4"/>
                         New Chat
                     </button>
                 </div>
@@ -181,14 +182,14 @@ const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
                     <div className="py-2">
                         {isLoadingChats ? (
                             <div className="p-4 text-center">
-                                <Loader className="w-6 h-6 mx-auto mb-2 text-purple-400 animate-spin" />
+                                <Loader className="w-6 h-6 mx-auto mb-2 text-purple-400 animate-spin"/>
                                 <p className="text-sm text-gray-400">Loading chats...</p>
                             </div>
                         ) : allChats.length === 0 ? (
                             <div className="p-4 text-center">
                                 <div className="mx-auto w-16 h-16 bg-gradient-to-br from-purple-500/20 to-blue-500/20
                                     rounded-full flex items-center justify-center mb-3">
-                                    <MessageSquare className="w-8 h-8 text-purple-400" />
+                                    <MessageSquare className="w-8 h-8 text-purple-400"/>
                                 </div>
                                 <p className="text-sm text-gray-400">No chats yet</p>
                                 <p className="text-xs text-gray-500 mt-1">Start a new conversation!</p>
@@ -234,7 +235,7 @@ const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
                                                             className="p-1 hover:bg-white/10 rounded text-green-400"
                                                             title="Save"
                                                         >
-                                                            <Check className="w-3 h-3" />
+                                                            <Check className="w-3 h-3"/>
                                                         </button>
                                                         <button
                                                             onClick={(e) => {
@@ -244,7 +245,7 @@ const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
                                                             className="p-1 hover:bg-white/10 rounded text-red-400"
                                                             title="Cancel"
                                                         >
-                                                            <X className="w-3 h-3" />
+                                                            <X className="w-3 h-3"/>
                                                         </button>
                                                     </div>
                                                 ) : (
@@ -261,7 +262,7 @@ const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
                                                                 p-1 hover:bg-white/10 rounded transition-all"
                                                             title="Rename chat"
                                                         >
-                                                            <Edit2 className="w-3 h-3 text-gray-400" />
+                                                            <Edit2 className="w-3 h-3 text-gray-400"/>
                                                         </button>
                                                     </div>
                                                 )}
@@ -285,9 +286,9 @@ const ChatSidebar = ({ isOpen, onClose, modelSettings }) => {
                                                     `}
                                                 >
                                                     {deletingChatId === chat.id ? (
-                                                        <Loader className="w-4 h-4 animate-spin" />
+                                                        <Loader className="w-4 h-4 animate-spin"/>
                                                     ) : (
-                                                        <Trash2 className="w-4 h-4" />
+                                                        <Trash2 className="w-4 h-4"/>
                                                     )}
                                                 </button>
                                             )}

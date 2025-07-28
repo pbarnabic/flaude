@@ -135,3 +135,15 @@ export const BASE_TOOLS = [
     //     }
     // }
 ];
+
+export const NAME_CHAT_TOOL = {
+    name: "name_chat",
+    description: "Names a chat based on the initial message or messages of the conversation",
+    input_schema: {
+        "type": "object",
+        "properties": {
+            chat_name: {"type": "string"}
+        },
+        required: ["chat_name"]
+    }
+};
