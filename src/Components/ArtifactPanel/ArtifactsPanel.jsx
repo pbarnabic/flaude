@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import ArtifactTabs from "../ArtifactTabs/ArtifactTabs.jsx";
 import ArtifactCanvas from "../ArtifactCanvas/ArtifactCanvas.jsx";
 import ArtifactVersionDropdown from "../ArtifactVersionDropdown/ArtifactVersionDropdown.jsx";
-import {ArtifactParsingUtils} from "../../Utils/ArtifactParsingUtils.js";
+import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
 
 const ArtifactsPanel = ({
                             apiMessages = [],
@@ -20,7 +20,7 @@ const ArtifactsPanel = ({
     const [showVersionDropdown, setShowVersionDropdown] = useState({});
 
     // Get all artifact versions
-    const artifactVersions = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
+    const artifactVersions = ArtifactParsingUtilsV2.parseArtifactsFromMessages(apiMessages, streamingContent);
 
     // Write to localStorage when artifacts change
     useEffect(() => {
@@ -36,8 +36,8 @@ const ArtifactsPanel = ({
     const isCurrentlyStreaming = streamingContent && streamingContent.length > 0;
 
     if (isCurrentlyStreaming) {
-        const streamingArtifacts = ArtifactParsingUtils.parseArtifactsFromMessages([], streamingContent);
-        Object.entries(ArtifactParsingUtils.getLatestArtifacts(streamingArtifacts))
+        const streamingArtifacts = ArtifactParsingUtilsV2.parseArtifactsFromMessages([], streamingContent);
+        Object.entries(ArtifactParsingUtilsV2.getLatestArtifacts(streamingArtifacts))
             .forEach(([id, artifact]) => {
                 if (!artifact.isComplete) {
                     currentlyStreamingArtifacts.add(id);
@@ -70,8 +70,8 @@ const ArtifactsPanel = ({
         let activeStreamingArtifact = null;
 
         if (isCurrentlyStreaming) {
-            const streamingArtifacts = ArtifactParsingUtils.parseArtifactsFromMessages([], streamingContent);
-            const incompleteStreamingArtifact = Object.entries(ArtifactParsingUtils.getLatestArtifacts(streamingArtifacts))
+            const streamingArtifacts = ArtifactParsingUtilsV2.parseArtifactsFromMessages([], streamingContent);
+            const incompleteStreamingArtifact = Object.entries(ArtifactParsingUtilsV2.getLatestArtifacts(streamingArtifacts))
                 .find(([id, artifact]) => !artifact.isComplete);
 
             if (incompleteStreamingArtifact) {

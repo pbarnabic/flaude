@@ -3,7 +3,7 @@ import {useParams, useSearchParams} from 'react-router-dom';
 import ReactPreview from '../Components/ReactPreview/ReactPreview.jsx';
 import {useChats} from '../Contexts/ChatsContext.jsx';
 import {useAuthentication} from '../Contexts/AuthenticationContext.jsx';
-import {ArtifactParsingUtils} from '../Utils/ArtifactParsingUtils.js';
+import {ArtifactParsingUtilsV2} from '../Utils/ArtifactParsingUtilsV2.js';
 
 const ArtifactPreviewPage = () => {
     const {chatId} = useParams();
@@ -53,7 +53,7 @@ const ArtifactPreviewPage = () => {
         if (currentMessages.length === 0) return;
 
         try {
-            const artifactVersions = ArtifactParsingUtils.parseArtifactsFromMessages(currentMessages);
+            const artifactVersions = ArtifactParsingUtilsV2.parseArtifactsFromMessages(currentMessages);
             const versions = artifactVersions[artifactId];
 
             if (!versions || versions.length === 0) {

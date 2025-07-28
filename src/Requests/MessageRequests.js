@@ -198,7 +198,7 @@ export const deleteMessagesByChatId = async (chatId) => {
 /**
  * Clear all messages for a chat and replace with new ones
  */
-export const replaceAllMessagesForChat = async (chatId, newMessages) => {
+export const putChatMessages = async (chatId, newMessages) => {
     try {
         ensureAuthenticated();
 

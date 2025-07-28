@@ -7,7 +7,7 @@ import {
     deleteChat
 } from '../Requests/ChatRequests.js';
 import {
-    replaceAllMessagesForChat,
+    putChatMessages,
     getMessagesByChatId
 } from '../Requests/MessageRequests.js';
 import {
@@ -51,11 +51,6 @@ export const ChatsProvider = ({ children }) => {
 
                     // Set the current user for the database layer with password context
                     setCurrentUser(currentUsername, passwordCtx);
-
-                    console.log('Setting database ready to true');
-                    console.log('passwordCtx:', passwordCtx);
-                    console.log('Has encryptData:', !!passwordCtx.encryptData);
-                    console.log('Has decryptData:', !!passwordCtx.decryptData);
 
                     setIsDatabaseReady(true);
 
@@ -238,7 +233,7 @@ export const ChatsProvider = ({ children }) => {
         // Auto-save with debouncing handled by the component
         if (currentChat) {
             try {
-                return await replaceAllMessagesForChat(currentChat.id, messages);
+                return await putChatMessages(currentChat.id, messages);
             } catch (error) {
                 console.error('Error saving messages:', error);
                 throw error;
@@ -256,7 +251,7 @@ export const ChatsProvider = ({ children }) => {
 
         if (currentChat) {
             try {
-                await replaceAllMessagesForChat(currentChat.id, []);
+                await putChatMessages(currentChat.id, []);
             } catch (error) {
                 console.error('Error clearing messages:', error);
                 throw error;

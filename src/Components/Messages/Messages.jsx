@@ -2,7 +2,7 @@ import React, {useEffect, useRef} from "react";
 import {Bot, Code, FileText, Package, Sparkles, Terminal, Palette} from "lucide-react";
 import Message from "../Message/Message.jsx";
 import LoadingDots from "../LoadingDots/LoadingDots.jsx";
-import {ArtifactParsingUtils} from "../../Utils/ArtifactParsingUtils.js";
+import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
 
 const Messages = ({
                       apiMessages = [],
@@ -20,8 +20,8 @@ const Messages = ({
     }, [apiMessages, streamingContent]);
 
     // Use shared parsing utility - get all versions and latest artifacts
-    const artifactVersions = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
-    const latestArtifacts = ArtifactParsingUtils.getLatestArtifacts(artifactVersions);
+    const artifactVersions = ArtifactParsingUtilsV2.parseArtifactsFromMessages(apiMessages, streamingContent);
+    const latestArtifacts = ArtifactParsingUtilsV2.getLatestArtifacts(artifactVersions);
 
     const buildDisplayMessages = () => {
         const display = [];
@@ -37,7 +37,7 @@ const Messages = ({
                     sourceMessageId: msg.id
                 });
             } else if (msg.role === "assistant" && typeof msg.content === "string") {
-                const segments = ArtifactParsingUtils.parseSegments(msg.content);
+                const segments = ArtifactParsingUtilsV2.parseSegments(msg.content);
                 for (const segment of segments) {
                     if (segment.type === "text") {
                         display.push({
@@ -62,7 +62,7 @@ const Messages = ({
 
         // Only add streaming content if there's a streaming message
         if (streamingContent && streamingMessageId) {
-            const segments = ArtifactParsingUtils.parseSegments(streamingContent, true);
+            const segments = ArtifactParsingUtilsV2.parseSegments(streamingContent, true);
             for (const segment of segments) {
                 if (segment.type === "text") {
                     display.push({

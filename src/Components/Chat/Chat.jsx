@@ -11,12 +11,12 @@ import SetupApiKey from "../SetupApiKey/SetupApiKey.jsx";
 import {streamClaudeAPI} from "../../Requests/AnthropicRequests.js";
 import {OPENING_TAG} from "../../Constants/ArtifactDelimiters.js";
 import {processArtifactUpdate} from "../../Utils/ToolUtils.js";
-import {ArtifactParsingUtils} from "../../Utils/ArtifactParsingUtils.js";
+import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
 import {estimateTokens, rateLimiter} from "../../Utils/RateLimitUtils.js";
 import {executeREPL} from "../../Utils/ReplUtils.js";
 import {useChats} from "../../Contexts/ChatsContext.jsx";
 import {useAuthentication} from "../../Contexts/AuthenticationContext.jsx";
-import {getApiKey, getRateLimits, saveApiKey, saveRateLimits} from "../../Requests/SettingsRequests.js";
+import {getApiKey, getRateLimits, putApiKey, putRateLimits} from "../../Requests/SettingsRequests.js";
 
 const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelSettings}) => {
     const {chatId} = useParams();
@@ -102,7 +102,7 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
 
         const saveApiKeyDebounced = async () => {
             try {
-                await saveApiKey(apiKey);
+                await putApiKey(apiKey);
             } catch (error) {
                 console.error('Error saving API key:', error);
             }
@@ -119,7 +119,7 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
 
         const saveRateLimitsDebounced = async () => {
             try {
-                await saveRateLimits(rateLimits);
+                await putRateLimits(rateLimits);
             } catch (error) {
                 console.error('Error saving rate limits:', error);
             }
@@ -219,8 +219,8 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
 
     // Get current artifacts (latest versions for processing)
     const getCurrentArtifacts = () => {
-        const artifactVersions = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
-        return ArtifactParsingUtils.getLatestArtifacts(artifactVersions);
+        const artifactVersions = ArtifactParsingUtilsV2.parseArtifactsFromMessages(apiMessages, streamingContent);
+        return ArtifactParsingUtilsV2.getLatestArtifacts(artifactVersions);
     };
 
     /**

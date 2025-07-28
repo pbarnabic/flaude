@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Check, Copy, Code, Eye, ExternalLink } from "lucide-react";
 import { useParams } from "react-router-dom";
-import { ArtifactParsingUtils } from "../../Utils/ArtifactParsingUtils.js";
+import { ArtifactParsingUtilsV2 } from "../../Utils/ArtifactParsingUtilsV2.js";
 import ReactPreview from "../ReactPreview/ReactPreview.jsx";
 
 const ArtifactCanvas = ({ activeArtifact, artifacts, selectedVersions, artifactVersions }) => {
@@ -31,7 +31,7 @@ const ArtifactCanvas = ({ activeArtifact, artifacts, selectedVersions, artifactV
 
     useEffect(() => {
         if (window.Prism && codeRef.current && activeArtifact && artifacts[activeArtifact]) {
-            const language = ArtifactParsingUtils.getLanguageFromType(artifacts[activeArtifact]);
+            const language = ArtifactParsingUtilsV2.getLanguageFromType(artifacts[activeArtifact]);
             const codeElement = codeRef.current;
             codeElement.className = `language-${language}`;
             window.Prism.highlightElement(codeElement);
@@ -60,7 +60,7 @@ const ArtifactCanvas = ({ activeArtifact, artifacts, selectedVersions, artifactV
 
     useEffect(() => {
         if (artifact) {
-            setShowSyntaxHighlighting(ArtifactParsingUtils.shouldShowSyntaxHighlighting(artifact));
+            setShowSyntaxHighlighting(ArtifactParsingUtilsV2.shouldShowSyntaxHighlighting(artifact));
         }
     }, [artifact]);
 
@@ -147,7 +147,7 @@ const ArtifactCanvas = ({ activeArtifact, artifacts, selectedVersions, artifactV
                     <code
                         ref={codeRef}
                         key={`${activeArtifact}-${artifact.version}-${showPreview}`}
-                        className={`language-${ArtifactParsingUtils.getLanguageFromType(artifacts[activeArtifact])}`}
+                        className={`language-${ArtifactParsingUtilsV2.getLanguageFromType(artifacts[activeArtifact])}`}
                     >
                         {versionToRender?.content || ''}
                     </code>

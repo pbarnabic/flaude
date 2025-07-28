@@ -1,6 +1,6 @@
 import React from "react";
 import {ChevronLeft, Code} from "lucide-react";
-import {ArtifactParsingUtils} from "../../Utils/ArtifactParsingUtils.js";
+import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
 
 const MobileArtifactsViewer = ({
                                    apiMessages = [],
@@ -9,8 +9,8 @@ const MobileArtifactsViewer = ({
                                    setShowArtifacts
                                }) => {
     // Use shared parsing utility to derive artifacts from props
-    const artifactVersions = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
-    const artifacts = ArtifactParsingUtils.getLatestArtifacts(artifactVersions);
+    const artifactVersions = ArtifactParsingUtilsV2.parseArtifactsFromMessages(apiMessages, streamingContent);
+    const artifacts = ArtifactParsingUtilsV2.getLatestArtifacts(artifactVersions);
 
     return (
         <>

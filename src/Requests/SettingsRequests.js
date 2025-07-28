@@ -93,7 +93,7 @@ const deleteSetting = async (key) => {
 /**
  * Save rate limits for the current user
  */
-export const saveRateLimits = async (rateLimits) => {
+export const putRateLimits = async (rateLimits) => {
     return await saveSetting('rateLimits', rateLimits);
 };
 
@@ -108,7 +108,7 @@ export const getRateLimits = async () => {
  * Clear rate limits for the current user
  */
 export const clearRateLimits = async () => {
-    return await saveRateLimits({});
+    return await putRateLimits({});
 };
 
 /**
@@ -122,7 +122,7 @@ export const updateModelRateLimit = async (model, rateLimitData) => {
             [model]: rateLimitData
         };
 
-        return await saveRateLimits(updatedRateLimits);
+        return await putRateLimits(updatedRateLimits);
     } catch (error) {
         return defaultErrorHandler(error);
     }
@@ -144,7 +144,7 @@ export const getModelRateLimit = async (model) => {
 /**
  * Save encrypted API key for the current user
  */
-export const saveApiKey = async (apiKey) => {
+export const putApiKey = async (apiKey) => {
     if (!apiKey || typeof apiKey !== 'string') {
         throw new Error('API key must be a non-empty string');
     }
@@ -284,7 +284,7 @@ export const importSettings = async (settingsData) => {
         const promises = [];
 
         if (settingsData.rateLimits) {
-            promises.push(saveRateLimits(settingsData.rateLimits));
+            promises.push(putRateLimits(settingsData.rateLimits));
         }
 
         if (settingsData.userPreferences) {

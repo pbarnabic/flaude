@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from "react";
 import {Check, ChevronDown, Code, Copy, FileText, History, Play, X} from "lucide-react";
-import {ArtifactParsingUtils} from "../../Utils/ArtifactParsingUtils.js";
+import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
 
 const MobileArtifactCanvas = ({
                                  apiMessages = [],
@@ -16,7 +16,7 @@ const MobileArtifactCanvas = ({
     const [showVersionDropdown, setShowVersionDropdown] = useState({});
 
     // Get all artifact versions
-    const artifactVersions = ArtifactParsingUtils.parseArtifactsFromMessages(apiMessages, streamingContent);
+    const artifactVersions = ArtifactParsingUtilsV2.parseArtifactsFromMessages(apiMessages, streamingContent);
 
     // Get current display artifacts (respecting version selection)
     const artifacts = {};
@@ -55,7 +55,7 @@ const MobileArtifactCanvas = ({
 
     useEffect(() => {
         if (window.Prism && codeRef.current && showArtifacts && activeArtifact && artifacts[activeArtifact]) {
-            const language = ArtifactParsingUtils.getLanguageFromType(artifacts[activeArtifact]);
+            const language = ArtifactParsingUtilsV2.getLanguageFromType(artifacts[activeArtifact]);
             const codeElement = codeRef.current;
             codeElement.className = `language-${language}`;
             window.Prism.highlightElement(codeElement);
@@ -71,8 +71,8 @@ const MobileArtifactCanvas = ({
         let activeStreamingArtifact = null;
 
         if (isCurrentlyStreaming) {
-            const streamingArtifacts = ArtifactParsingUtils.parseArtifactsFromMessages([], streamingContent);
-            const incompleteStreamingArtifact = Object.entries(ArtifactParsingUtils.getLatestArtifacts(streamingArtifacts))
+            const streamingArtifacts = ArtifactParsingUtilsV2.parseArtifactsFromMessages([], streamingContent);
+            const incompleteStreamingArtifact = Object.entries(ArtifactParsingUtilsV2.getLatestArtifacts(streamingArtifacts))
                 .find(([id, artifact]) => !artifact.isComplete);
 
             if (incompleteStreamingArtifact) {
@@ -226,11 +226,11 @@ const MobileArtifactCanvas = ({
                             </button>
                         </div>
 
-                        {ArtifactParsingUtils.shouldShowSyntaxHighlighting(artifacts[activeArtifact]) ? (
+                        {ArtifactParsingUtilsV2.shouldShowSyntaxHighlighting(artifacts[activeArtifact]) ? (
                             <pre className="p-4 text-xs font-mono h-full overflow-auto">
                                 <code
                                     ref={codeRef}
-                                    className={`language-${ArtifactParsingUtils.getLanguageFromType(artifacts[activeArtifact])}`}
+                                    className={`language-${ArtifactParsingUtilsV2.getLanguageFromType(artifacts[activeArtifact])}`}
                                     key={`${activeArtifact}-${artifacts[activeArtifact].version}`}
                                 >
                                     {artifacts[activeArtifact].content || ''}
