@@ -1,15 +1,25 @@
 import React, {useState} from 'react';
-import {Bot, Check, Edit3, User, X} from 'lucide-react';
+import {Bot, Check, Edit3, User, X, Eye} from 'lucide-react';
 import MarkdownRenderer from "../MarkdownRenderer/MarkdownRenderer.jsx";
 import StreamingCursor from "../StreamingCursor/StreamingCursor.jsx";
+import { ImageUtils } from "../../Utils/ImageUtils.js";
 
-const Message = ({message, onEditSubmit, isLoading}) => {
+const Message = ({message, onEditSubmit, isLoading, onViewImage}) => {
     const [isEditing, setIsEditing] = useState(false);
-    const [editContent, setEditContent] = useState(message.content);
+    const [editContent, setEditContent] = useState('');
 
     const handleStartEdit = () => {
+        // Extract text content for editing
+        let textContent = '';
+        if (typeof message.content === 'string') {
+            textContent = message.content;
+        } else if (Array.isArray(message.content)) {
+            const textPart = message.content.find(part => part.type === 'text');
+            textContent = textPart ? textPart.text : '';
+        }
+
         setIsEditing(true);
-        setEditContent(message.content);
+        setEditContent(textContent);
     };
 
     const handleSaveEdit = () => {
@@ -21,7 +31,7 @@ const Message = ({message, onEditSubmit, isLoading}) => {
 
     const handleCancelEdit = () => {
         setIsEditing(false);
-        setEditContent(message.content);
+        setEditContent('');
     };
 
     const handleKeyPress = (e) => {
@@ -34,9 +44,35 @@ const Message = ({message, onEditSubmit, isLoading}) => {
         }
     };
 
-    if (message.role === 'user' && message?.content instanceof Array) { // we don't render tool calls
-        return <></>;
+    // Don't render user messages that are tool calls (they don't have image or text content)
+    if (message.role === 'user' && Array.isArray(message.content)) {
+        const hasImageOrText = message.content.some(part =>
+            part.type === 'image' || part.type === 'text'
+        );
+        if (!hasImageOrText) {
+            return <></>;
+        }
     }
+
+    // Extract text and images from content
+    const getTextContent = (content) => {
+        if (typeof content === 'string') return content;
+        if (Array.isArray(content)) {
+            const textPart = content.find(part => part.type === 'text');
+            return textPart ? textPart.text : '';
+        }
+        return '';
+    };
+
+    const getImageContent = (content) => {
+        if (Array.isArray(content)) {
+            return content.filter(part => part.type === 'image');
+        }
+        return [];
+    };
+
+    const textContent = getTextContent(message.content);
+    const imageContent = getImageContent(message.content);
 
     // User message - editable
     if (message.role === 'user') {
@@ -87,17 +123,77 @@ const Message = ({message, onEditSubmit, isLoading}) => {
         return (
             <div className="flex gap-2 sm:gap-3 justify-end group" style={{width: '100%'}}>
                 <div style={{flex: '1 1 0', minWidth: 0}}>
-                    <div className="rounded-2xl px-3 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg relative"
-                         style={{wordBreak: 'break-word', overflowWrap: 'anywhere'}}>
-                        <p className="whitespace-pre-wrap text-sm sm:text-base">{`${message.content}`}</p>
-                        <button
-                            onClick={handleStartEdit}
-                            disabled={isLoading}
-                            className="absolute -left-6 sm:-left-8 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-white hover:bg-gray-100 disabled:bg-gray-200 rounded-full shadow-md text-gray-600"
-                            title="Edit message"
-                        >
-                            <Edit3 className="w-3 h-3 sm:w-4 sm:h-4"/>
-                        </button>
+                    <div className="flex flex-col items-end gap-1">
+                        {/* Images stack - shown above text bubble */}
+                        {imageContent.length > 0 && (
+                            <div className="max-w-xs sm:max-w-sm">
+                                <div className="grid gap-1" style={{
+                                    gridTemplateColumns: imageContent.length === 1 ? '1fr' :
+                                        imageContent.length === 2 ? 'repeat(2, 1fr)' :
+                                            imageContent.length === 3 ? 'repeat(2, 1fr)' :
+                                                'repeat(2, 1fr)'
+                                }}>
+                                    {imageContent.map((image, index) => {
+                                        const dataURL = ImageUtils.createDataURL(image.source.data, image.source.media_type);
+                                        return (
+                                            <div
+                                                key={index}
+                                                className={`relative group rounded-xl overflow-hidden bg-white/20 border border-white/30 shadow-sm cursor-pointer hover:shadow-md transition-shadow ${
+                                                    imageContent.length === 3 && index === 2 ? 'col-span-2' : ''
+                                                }`}
+                                                style={{
+                                                    aspectRatio: imageContent.length === 1 ? 'auto' : '4/3',
+                                                    maxHeight: imageContent.length === 1 ? '300px' : '150px'
+                                                }}
+                                            >
+                                                <img
+                                                    src={dataURL}
+                                                    alt={`Image ${index + 1}`}
+                                                    className="w-full h-full object-cover"
+                                                    onClick={() => onViewImage?.({
+                                                        dataURL,
+                                                        mediaType: image.source.media_type,
+                                                        index: index + 1
+                                                    })}
+                                                />
+
+                                                {/* View button overlay */}
+                                                <button
+                                                    onClick={() => onViewImage?.({
+                                                        dataURL,
+                                                        mediaType: image.source.media_type,
+                                                        index: index + 1
+                                                    })}
+                                                    className="absolute inset-0 bg-black/0 hover:bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                                                    title="View full image"
+                                                >
+                                                    <div className="bg-white/90 hover:bg-white p-2 rounded-full shadow-md">
+                                                        <Eye className="w-5 h-5 text-slate-700" />
+                                                    </div>
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Text bubble - only shown if there's text content */}
+                        {textContent && (
+                            <div className="rounded-2xl px-3 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg relative max-w-xs sm:max-w-sm"
+                                 style={{wordBreak: 'break-word', overflowWrap: 'anywhere'}}>
+                                <p className="whitespace-pre-wrap text-sm sm:text-base">{textContent}</p>
+
+                                <button
+                                    onClick={handleStartEdit}
+                                    disabled={isLoading}
+                                    className="absolute -left-6 sm:-left-8 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-white hover:bg-gray-100 disabled:bg-gray-200 rounded-full shadow-md text-gray-600"
+                                    title="Edit message"
+                                >
+                                    <Edit3 className="w-3 h-3 sm:w-4 sm:h-4"/>
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div style={{flexShrink: 0}}>

@@ -17,6 +17,7 @@ import {executeREPL} from "../../Utils/ReplUtils.js";
 import {useChats} from "../../Contexts/ChatsContext.jsx";
 import {useAuthentication} from "../../Contexts/AuthenticationContext.jsx";
 import {getApiKey, getRateLimits, putApiKey, putRateLimits} from "../../Requests/SettingsRequests.js";
+import {ImageUtils} from "../../Utils/ImageUtils.js";
 
 const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelSettings}) => {
     const {chatId} = useParams();
@@ -50,6 +51,7 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
     const [activeArtifact, setActiveArtifact] = useState(null);
     const [showArtifacts, setShowArtifacts] = useState(false);
     const [showMobileMenu, setShowMobileMenu] = useState(false);
+    const [pendingImages, setPendingImages] = useState([]); // Images waiting to be sent
 
     // Rate Limiting UI State
     const [isWaiting, setIsWaiting] = useState(false);
@@ -403,10 +405,37 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
     };
 
     // Handle sending a message
-    const handleSend = async () => {
-        if (!input.trim() || !apiKey || !currentChat || !isAuthenticated) return;
+    const handleSend = async (isContinue = false) => {
+        const hasText = input.trim();
+        const hasImages = pendingImages.length > 0;
 
-        const userContent = input;
+        if (!hasText && !hasImages) return;
+        if (!apiKey || !currentChat || !isAuthenticated) return;
+
+        // Build user message content in API format
+        let userContent;
+
+        if (hasImages) {
+            const contentArray = [];
+
+            // Add text if present
+            if (hasText) {
+                contentArray.push({
+                    type: 'text',
+                    text: input.trim()
+                });
+            }
+
+            // Add images (already in API format)
+            contentArray.push(...pendingImages);
+
+            userContent = contentArray;
+        } else {
+            // Text only message
+            userContent = input.trim();
+        }
+
+        // Create new message - content is exactly what API expects
         const newApiMessages = [...apiMessages, {
             role: 'user',
             content: userContent
@@ -414,6 +443,7 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
 
         updateCurrentChatMessages(newApiMessages);
         setInput('');
+        setPendingImages([]); // Clear pending images after sending
         setIsLoading(true);
 
         try {
@@ -424,6 +454,18 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
             setIsLoading(false);
         }
     };
+
+    const handleImagesAdded = async (files) => {
+        const imageObjects = await ImageUtils.processFilesForAPI(files);
+        setPendingImages(prev => [...prev, ...imageObjects]);
+    };
+
+    // Handle removing pending images
+    const handleRemovePendingImage = (index) => {
+        setPendingImages(prev => prev.filter((_, i) => i !== index));
+    };
+
+
 
     const handleClear = async () => {
         if (!isAuthenticated) return;
@@ -444,8 +486,22 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
         const truncatedMessages = apiMessages.slice(0, messageApiIndex);
         updateCurrentChatMessages(truncatedMessages);
 
-        // Send the edited message
-        setInput(newContent);
+        // Send the edited message (text only for edits)
+        const newApiMessages = [...truncatedMessages, {
+            role: 'user',
+            content: newContent
+        }];
+
+        updateCurrentChatMessages(newApiMessages);
+        setIsLoading(true);
+
+        try {
+            await runStreamingConversation(newApiMessages, apiKey, modelSettings);
+        } catch (error) {
+            console.error('Error in conversation:', error);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleStop = () => {
@@ -551,6 +607,7 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
                         setActiveArtifact(artifactId);
                         setShowArtifacts(true);
                     }}
+                    onImagesAdded={handleImagesAdded}
                 />
 
                 {/* Rate Limit Waiting Indicator */}
@@ -575,6 +632,9 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
                     setInput={setInput}
                     apiKey={apiKey}
                     handleStop={handleStop}
+                    pendingImages={pendingImages}
+                    onImagesAdded={handleImagesAdded}
+                    onRemovePendingImage={handleRemovePendingImage}
                 />
             </div>
 

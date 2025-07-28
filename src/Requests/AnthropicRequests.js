@@ -3,15 +3,47 @@ import {BASE_TOOLS} from "../Constants/Tools.js";
 import {generateArtifactUpdateTools} from "../Utils/ToolUtils.js";
 
 export const streamClaudeAPI = async (messages, apiKey, modelSettings, existingArtifacts = {}, onChunk) => {
-    // tools
+    // Tools
     const artifactUpdateTools = generateArtifactUpdateTools(existingArtifacts);
     const allTools = [...BASE_TOOLS, ...artifactUpdateTools];
+
+    // Process messages to ensure proper format for API
+    const processedMessages = messages.map(msg => {
+        if (msg.role === 'user') {
+            // Handle different content formats
+            if (Array.isArray(msg.content)) {
+                // Already in API format with images
+                return {
+                    role: msg.role,
+                    content: msg.content
+                };
+            } else if (typeof msg.content === 'string') {
+                // Simple text message
+                return {
+                    role: msg.role,
+                    content: msg.content
+                };
+            } else {
+                // Fallback to string content
+                return {
+                    role: msg.role,
+                    content: String(msg.content)
+                };
+            }
+        } else {
+            // Assistant messages - keep as is
+            return {
+                role: msg.role,
+                content: msg.content
+            };
+        }
+    });
 
     const body = {
         model: modelSettings.model,
         max_tokens: modelSettings.maxTokens,
         temperature: modelSettings.temperature,
-        messages: messages,
+        messages: processedMessages,
         system: SYSTEM_MESSAGE,
         stream: true
     };

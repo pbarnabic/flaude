@@ -1,6 +1,8 @@
-
-import React, { useState, useEffect, useRef } from 'react';
-import { RefreshCw, Send, X } from "lucide-react";
+import React, {useState, useEffect, useRef} from 'react';
+import {RefreshCw, Send, X} from "lucide-react";
+import ImageDropZone from "../ImageDropZone/ImageDropZone.jsx";
+import ImagePreview from "../ImagePreview/ImagePreview.jsx";
+import ViewImageModal from "../ViewImageModal/ViewImageModal.jsx";
 
 const ChatInput = ({
                        canContinue,
@@ -10,8 +12,12 @@ const ChatInput = ({
                        setInput,
                        apiKey,
                        handleStop,
+                       pendingImages = [], // API-format images from shared state
+                       onImagesAdded, // Handler from parent (receives files)
+                       onRemovePendingImage, // Remove handler from parent
                    }) => {
     const textareaRef = useRef(null);
+    const [viewingImage, setViewingImage] = useState(null);
 
     // Auto-resize textarea based on content
     const adjustTextareaHeight = () => {
@@ -46,8 +52,27 @@ const ChatInput = ({
     const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            handleSend();
+            handleSendWithImages();
         }
+    };
+
+    const handleSendWithImages = () => {
+        // Just call parent handler - images are managed by parent
+        handleSend(false);
+    };
+
+    const handleImagesAddedLocal = (files) => {
+        // Delegate to parent handler (pass files, not processed images)
+        onImagesAdded(files);
+    };
+
+    const handleRemoveImage = (index) => {
+        // Delegate to parent handler (use index instead of ID)
+        onRemovePendingImage(index);
+    };
+
+    const handleViewImage = (imageData) => {
+        setViewingImage(imageData);
     };
 
     return (
@@ -68,7 +93,19 @@ const ChatInput = ({
                         </button>
                     </div>
                 )}
-                <div className="flex gap-3 items-end">
+
+                {/* Image previews */}
+                {pendingImages.length > 0 && (
+                    <div className="mb-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                        <ImagePreview
+                            images={pendingImages}
+                            onRemoveImage={handleRemoveImage}
+                            onViewImage={handleViewImage}
+                        />
+                    </div>
+                )}
+
+                <ImageDropZone onImagesAdded={handleImagesAddedLocal} className="flex gap-3 items-end">
                     <div className="flex-1 relative">
                         <textarea
                             ref={textareaRef}
@@ -108,8 +145,8 @@ const ChatInput = ({
                             </button>
                         ) : (
                             <button
-                                onClick={() => handleSend()}
-                                disabled={isLoading || !input.trim() || !apiKey}
+                                onClick={handleSendWithImages}
+                                disabled={isLoading || (!input.trim() && pendingImages.length === 0) || !apiKey}
                                 className="absolute bottom-3 right-3 p-2 bg-gradient-to-r
                                     from-purple-500 to-purple-600 text-white rounded-lg
                                     hover:from-purple-600 hover:to-purple-700
@@ -122,8 +159,15 @@ const ChatInput = ({
                             </button>
                         )}
                     </div>
-                </div>
+                </ImageDropZone>
             </div>
+
+            {/* Image viewer modal */}
+            <ViewImageModal
+                image={viewingImage}
+                isOpen={!!viewingImage}
+                onClose={() => setViewingImage(null)}
+            />
         </div>
     );
 }
