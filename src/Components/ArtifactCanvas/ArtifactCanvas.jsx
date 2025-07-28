@@ -1,8 +1,8 @@
 import React, {useEffect, useRef, useState} from "react";
 import {Check, Copy, Code, Eye, ExternalLink} from "lucide-react";
 import {useParams} from "react-router-dom";
-import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
 import ReactPreview from "../ReactPreview/ReactPreview.jsx";
+import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
 
 const ArtifactCanvas = ({activeArtifact, artifacts, selectedVersions, artifactVersions}) => {
     const {chatId} = useParams();
