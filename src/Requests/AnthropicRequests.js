@@ -177,7 +177,7 @@ export const streamClaudeAPI = async (messages, apiKey, modelSettings, existingA
 };
 
 
-export const callClaudeAPI = async (apiKey, messages, tools = [], modelSettings = {}) => {
+export const callClaudeAPI = async (apiKey, messages, tools = [], modelSettings = {}, toolChoice = {type: 'auto'}) => {
     const defaultModelSettings = {
         model: 'claude-3-5-sonnet-20241022',
         maxTokens: 4096,
@@ -229,7 +229,7 @@ export const callClaudeAPI = async (apiKey, messages, tools = [], modelSettings 
 
     if (tools?.length) {
         body.tools = tools;
-        body.tool_choice = {type: 'auto'};
+        body.tool_choice = toolChoice;
     }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {

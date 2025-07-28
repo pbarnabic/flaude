@@ -14,7 +14,7 @@ import ChatLoading from "../ChatLoading/ChatLoading.jsx";
 import {useChats} from "../../Contexts/ChatsContext.jsx";
 import {useAuthentication} from "../../Contexts/AuthenticationContext.jsx";
 import {getApiKey, getRateLimits, putApiKey, putRateLimits} from "../../Requests/SettingsRequests.js";
-import {streamClaudeAPI, callClaudeAPI} from "../../Requests/AnthropicRequests.js";
+import {callClaudeAPI, streamClaudeAPI} from "../../Requests/AnthropicRequests.js";
 import {processArtifactUpdate} from "../../Utils/ToolUtils.js";
 import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
 import {estimateTokens, rateLimiter} from "../../Utils/RateLimitUtils.js";
@@ -38,7 +38,8 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
         loadCurrentChat,
         updateCurrentChatMessages,
         clearCurrentChatMessages,
-        createNewChat
+        createNewChat,
+        updateChatById
     } = useChats();
 
     // Use current messages from context instead of local state
@@ -230,6 +231,43 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
     };
 
     /**
+     * Generate a name for the chat based on the conversation
+     */
+    const generateChatName = async (messages) => {
+        if (!apiKey || !messages.length) return null;
+
+        try {
+            // Use a lighter model for naming to save tokens
+            const namingModelSettings = {
+                model: 'claude-3-5-haiku-20241022',
+                maxTokens: 200,
+                temperature: 0.3
+            };
+
+            const response = await callClaudeAPI(
+                apiKey,
+                messages,
+                [NAME_CHAT_TOOL],
+                namingModelSettings,
+                {type: "tool", name: "name_chat"}
+            );
+
+            // Check if the tool was called
+            if (response.toolCalls && response.toolCalls.length > 0) {
+                const namingTool = response.toolCalls.find(call => call.name === 'name_chat');
+                if (namingTool && namingTool.input.chat_name) {
+                    return namingTool.input.chat_name;
+                }
+            }
+
+            return null;
+        } catch (error) {
+            console.error('Error generating chat name:', error);
+            return null;
+        }
+    };
+
+    /**
      * Process REPL tool calls
      */
     const processReplTool = async (toolCall) => {
@@ -260,8 +298,27 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
     const runStreamingConversation = async (currentApiMessages, apiKey, modelSettings) => {
         const messageIdCounter = Date.now() + 1;
 
-        // Estimate tokens and handle rate limits
-        const messageText = JSON.stringify(currentApiMessages);
+        // Filter out images for token estimation - only count text content
+        const textOnlyMessages = currentApiMessages.map(msg => {
+            if (typeof msg.content === 'string') {
+                // Simple text message, keep as is
+                return msg;
+            } else if (Array.isArray(msg.content)) {
+                // Message with mixed content, filter to text only
+                const textContent = msg.content
+                    .filter(item => item.type === 'text')
+                    .map(item => item.text)
+                    .join(' ');
+
+                return {
+                    ...msg,
+                    content: textContent || '' // Fallback to empty string if no text
+                };
+            }
+            return msg;
+        });
+
+        const messageText = JSON.stringify(textOnlyMessages);
         const estimatedInputTokens = estimateTokens(messageText);
 
         const waitTime = rateLimiter.calculateWaitTime(
@@ -354,6 +411,27 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
             const updatedApiMessages = [...currentApiMessages, newApiMessage];
             // Use context method to update messages
             updateCurrentChatMessages(updatedApiMessages);
+
+            // Check if we should name the chat (after first user message and assistant response)
+            const shouldNameChat = currentChat &&
+                (currentChat.title === 'New Chat' || !currentChat.title) &&
+                updatedApiMessages.length >= 2 && // At least one user message and one assistant response
+                updatedApiMessages[0].role === 'user';
+
+            if (shouldNameChat) {
+                try {
+                    // Generate name based on the first few messages
+                    const messagesToAnalyze = updatedApiMessages.slice(0, 4); // First 2 exchanges max
+                    const chatName = await generateChatName(messagesToAnalyze);
+
+                    if (chatName && chatName.trim()) {
+                        await updateChatById(currentChat.id, {title: chatName.trim()});
+                    }
+                } catch (error) {
+                    console.error('Error naming chat:', error);
+                    // Don't let naming errors break the conversation flow
+                }
+            }
 
             // Process tool calls if any
             if (toolCalls.length > 0) {
@@ -468,7 +546,6 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
     const handleRemovePendingImage = (index) => {
         setPendingImages(prev => prev.filter((_, i) => i !== index));
     };
-
 
     const handleClear = async () => {
         if (!isAuthenticated) return;

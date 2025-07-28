@@ -1,4 +1,5 @@
-import React, {useEffect, useRef, useState} from "react";
+
+import React, {useEffect, useRef, useState, useMemo} from "react";
 import {Bot} from "lucide-react";
 import Message from "../Message/Message.jsx";
 import LoadingDots from "../LoadingDots/LoadingDots.jsx";
@@ -22,22 +23,17 @@ const Messages = ({
     const [viewingImage, setViewingImage] = useState(null);
     const [showDropIndicator, setShowDropIndicator] = useState(false);
 
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({behavior: "smooth"});
-    }, [apiMessages, streamingContent]);
+    const artifactVersions = useMemo(() =>
+            ArtifactParsingUtilsV2.parseArtifactsFromMessages(apiMessages, streamingContent),
+        [apiMessages, streamingContent]
+    );
 
-    const handleImagesAddedWithNotification = (newImages) => {
-        onImagesAdded(newImages);
-        setShowDropIndicator(true);
-        setTimeout(() => {
-            setShowDropIndicator(false);
-        }, 3000);
-    };
+    const latestArtifacts = useMemo(() =>
+            ArtifactParsingUtilsV2.getLatestArtifacts(artifactVersions),
+        [artifactVersions]
+    );
 
-    const artifactVersions = ArtifactParsingUtilsV2.parseArtifactsFromMessages(apiMessages, streamingContent);
-    const latestArtifacts = ArtifactParsingUtilsV2.getLatestArtifacts(artifactVersions);
-
-    const buildDisplayMessages = () => {
+    const displayMessages = useMemo(() => {
         const display = [];
         let id = 0;
 
@@ -150,10 +146,24 @@ const Messages = ({
         }
 
         return display;
-    };
+    }, [apiMessages, streamingToolCalls, streamingContent, streamingMessageId, latestArtifacts]);
 
-    const displayMessages = buildDisplayMessages();
-    const shouldShowEmptyState = displayMessages.length === 0 && !isLoading && !streamingMessageId;
+    const shouldShowEmptyState = useMemo(() =>
+            displayMessages.length === 0 && !isLoading && !streamingMessageId,
+        [displayMessages.length, isLoading, streamingMessageId]
+    );
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({behavior: "smooth"});
+    }, [apiMessages, streamingContent]);
+
+    const handleImagesAddedWithNotification = (newImages) => {
+        onImagesAdded(newImages);
+        setShowDropIndicator(true);
+        setTimeout(() => {
+            setShowDropIndicator(false);
+        }, 3000);
+    };
 
     return (
         <ImageDropZone
@@ -177,7 +187,7 @@ const Messages = ({
                                 latestArtifacts={latestArtifacts}
                             />
                         ))}
-                        {isLoading && !streamingMessageId && !streamingToolCalls?.length && (
+                        {(isLoading || (streamingMessageId && !streamingContent && !streamingToolCalls?.length)) && (
                             <div className="flex gap-2 sm:gap-3 justify-start w-full">
                                 <div className="flex-shrink-0 w-8 h-8">
                                     <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
