@@ -1,7 +1,21 @@
 import React, {useState} from "react";
-import {Eye, EyeOff, Key, Menu, Sparkles, Trash2, Code, Settings, MessageSquare, Edit2, Check, X} from "lucide-react";
+import {
+    Eye,
+    EyeOff,
+    Key,
+    Menu,
+    Sparkles,
+    Code,
+    Settings,
+    MessageSquare,
+    Edit2,
+    Check,
+    X,
+    LogOut
+} from "lucide-react";
 import {MODELS} from "../../Constants/Models.js";
 import {useChats} from "../../Contexts/ChatsContext.jsx";
+import {useAuthentication} from "../../Contexts/AuthenticationContext.jsx";
 
 const Header = ({
                     showApiKey,
@@ -20,6 +34,7 @@ const Header = ({
                     setShowChatSidebar
                 }) => {
     const {currentChat, updateChatById} = useChats();
+    const {logout} = useAuthentication();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editTitle, setEditTitle] = useState('');
 
@@ -213,15 +228,25 @@ const Header = ({
                             </button>
                         )}
 
+                        {/*<button*/}
+                        {/*    onClick={() => {*/}
+                        {/*        handleClear();*/}
+                        {/*        setShowMobileMenu(false);*/}
+                        {/*    }}*/}
+                        {/*    className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center justify-center gap-2"*/}
+                        {/*>*/}
+                        {/*    <Trash2 className="w-4 h-4"/>*/}
+                        {/*    <span className="text-sm">Clear</span>*/}
+                        {/*</button>*/}
                         <button
                             onClick={() => {
-                                handleClear();
+                                logout();
                                 setShowMobileMenu(false);
                             }}
                             className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center justify-center gap-2"
                         >
-                            <Trash2 className="w-4 h-4"/>
-                            <span className="text-sm">Clear</span>
+                            <LogOut className="w-4 h-4"/>
+                            <span className="text-sm">Logout</span>
                         </button>
                     </div>
                 </div>

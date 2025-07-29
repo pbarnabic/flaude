@@ -1,15 +1,61 @@
-import React, {useState} from 'react';
-import {User, Lock, Eye, EyeOff} from 'lucide-react';
-import ModalHeader from '../ModalHeader/ModalHeader.jsx';
 
-const LoginMode = ({selectedUser, onLogin, isSubmitting, setMode}) => {
+import React, {useState, useEffect} from 'react';
+import {User, Lock, Eye, EyeOff, UserCheck} from 'lucide-react';
+import ModalHeader from '../ModalHeader/ModalHeader.jsx';
+import {GUEST_PASSWORD} from "../../Constants/AuthConstants.js";
+
+const LoginMode = ({selectedUser, onLogin, isSubmitting, setMode, isGuest, onBackToSelection}) => {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+
+    // Auto-login for guest users
+    useEffect(() => {
+        if (isGuest) {
+            setPassword(GUEST_PASSWORD);
+            // Auto-submit after a brief delay to show the UI
+            const timer = setTimeout(() => {
+                onLogin(GUEST_PASSWORD);
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [isGuest, onLogin]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
         onLogin(password);
     };
+
+    // For guest users, show a simplified view
+    if (isGuest) {
+        return (
+            <>
+                <ModalHeader
+                    icon={<UserCheck className="w-8 h-8 text-white"/>}
+                    title="Guest Access"
+                    subtitle="Signing you in as a guest user"
+                />
+
+                <div className="space-y-4">
+                    <div className="text-center py-8">
+                        <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"/>
+                        <p className="text-gray-600">Setting up guest session...</p>
+                        <p className="text-sm text-gray-500 mt-2">
+                            Guest sessions have limited features and data is not persisted
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={onBackToSelection}
+                        className="w-full border border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 transition-all"
+                        disabled={isSubmitting}
+                    >
+                        Back to User Selection
+                    </button>
+                </div>
+            </>
+        );
+    }
 
     return (
         <>
@@ -47,11 +93,11 @@ const LoginMode = ({selectedUser, onLogin, isSubmitting, setMode}) => {
                 <div className="flex gap-2">
                     <button
                         type="button"
-                        onClick={() => setMode('select')}
+                        onClick={onBackToSelection}
                         className="flex-1 border border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 transition-all"
                         disabled={isSubmitting}
                     >
-                        Back
+                        Back to User Selection
                     </button>
                     <button
                         type="submit"

@@ -1,13 +1,14 @@
-import {User} from "lucide-react";
 import React from "react";
+import {User, UserCheck} from "lucide-react";
 
 const UsernameSelector = ({
-                          existingUsers,
-                          selectedUser,
-                          setSelectedUser,
-                          setMode,
-                          isSubmitting
-}) => {
+                              existingUsers,
+                              selectedUser,
+                              setSelectedUser,
+                              setMode,
+                              isSubmitting,
+                              onGuestLogin
+                          }) => {
     return (
         <div className="space-y-4">
             <div>
@@ -48,6 +49,30 @@ const UsernameSelector = ({
                 >
                     New User
                 </button>
+            </div>
+
+            {/* Guest Login Button */}
+            <div className="border-t pt-4">
+                <button
+                    onClick={onGuestLogin}
+                    disabled={isSubmitting}
+                    className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                >
+                    {isSubmitting ? (
+                        <div className="flex items-center justify-center gap-2">
+                            <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"/>
+                            Signing in as Guest...
+                        </div>
+                    ) : (
+                        <>
+                            <UserCheck className="w-4 h-4"/>
+                            Continue as Guest
+                        </>
+                    )}
+                </button>
+                <p className="text-xs text-gray-500 text-center mt-1">
+                    No account required
+                </p>
             </div>
         </div>
     )

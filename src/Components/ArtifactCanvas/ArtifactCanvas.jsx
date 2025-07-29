@@ -3,8 +3,11 @@ import {Check, Copy, Code, Eye, ExternalLink} from "lucide-react";
 import {useParams} from "react-router-dom";
 import ReactPreview from "../ReactPreview/ReactPreview.jsx";
 import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
+import {useAuthentication} from "../../Contexts/AuthenticationContext.jsx";
+import {USERNAME_QUERY_PARAM} from "../../Constants/AuthConstants.js";
 
 const ArtifactCanvas = ({activeArtifact, artifacts, selectedVersions, artifactVersions}) => {
+    const {currentUsername} = useAuthentication();
     const {chatId} = useParams();
     const codeRef = useRef(null);
     const codeContainerRef = useRef(null);
@@ -78,7 +81,7 @@ const ArtifactCanvas = ({activeArtifact, artifacts, selectedVersions, artifactVe
         const isLatestVersion = selectedVersionNumber === artifactVersions[artifact.id]?.length;
 
         const version = isLatestVersion ? 'latest' : selectedVersionNumber;
-        const url = `/preview/${chatId}?artifactId=${activeArtifact}&version=${version}`;
+        const url = `/preview/${chatId}?artifactId=${activeArtifact}&version=${version}&${USERNAME_QUERY_PARAM}=${currentUsername}`;
 
         window.open(url, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
     };

@@ -1,6 +1,4 @@
 import React, {createContext, useContext, useEffect, useState} from 'react';
-import {encryptionUtils, hashPassword} from '../Utils/EncryptionUtils.js';
-import {validateUsername, validatePassword} from '../Utils/AuthenticationUtils.js';
 import {
     getRegisteredUsers,
     storeUserPasswordHash,
@@ -10,6 +8,9 @@ import {
     testPasswordWithUserData
 } from '../Requests/UserRequests.js';
 import {getUserDatabaseName} from '../Requests/BaseStorageRequests.js';
+import {CACHED_USERNAME_KEY, GUEST_PASSWORD, GUEST_USERNAME} from "../Constants/AuthConstants.js";
+import {encryptionUtils, hashPassword} from '../Utils/EncryptionUtils.js';
+import {validateUsername, validatePassword} from '../Utils/AuthenticationUtils.js';
 
 const AuthenticationContext = createContext();
 
@@ -54,6 +55,10 @@ export const AuthenticationProvider = ({ children }) => {
             }
 
             const trimmedUsername = username.trim();
+
+            if (trimmedUsername === GUEST_USERNAME) {
+                throw new Error('Username cannot be ' + GUEST_USERNAME);
+            }
 
             // Validate username using existing utility
             const usernameError = validateUsername(trimmedUsername);
@@ -108,6 +113,18 @@ export const AuthenticationProvider = ({ children }) => {
 
             const trimmedUsername = username.trim();
 
+            // Handle guest login with hardcoded credentials
+            if (trimmedUsername === GUEST_USERNAME) {
+                if (password !== GUEST_PASSWORD) {
+                    throw new Error('Invalid guest credentials');
+                }
+
+                setCurrentUsername(GUEST_USERNAME);
+                setCurrentPassword(GUEST_PASSWORD);
+                setIsAuthenticated(true);
+                return true;
+            }
+
             // Basic username validation for authentication (less strict than signup)
             if (trimmedUsername.length < 2) {
                 throw new Error('Username must be at least 2 characters long');
@@ -161,6 +178,11 @@ export const AuthenticationProvider = ({ children }) => {
 
             const trimmedUsername = username.trim();
 
+            // Prevent deletion of guest account
+            if (trimmedUsername === GUEST_USERNAME) {
+                throw new Error('Cannot delete guest account');
+            }
+
             // Security check: Only authenticated users can delete accounts
             if (!isAuthenticated || !currentUsername) {
                 throw new Error('You must be signed in to delete an account');
@@ -190,6 +212,11 @@ export const AuthenticationProvider = ({ children }) => {
     // Change password for current user
     const changePassword = async (oldPassword, newPassword) => {
         try {
+            // Prevent password change for guest
+            if (currentUsername === GUEST_USERNAME) {
+                throw new Error('Cannot change password for guest account');
+            }
+
             if (!isAuthenticated || !currentUsername || currentPassword !== oldPassword) {
                 throw new Error('Current password is incorrect');
             }
@@ -211,9 +238,13 @@ export const AuthenticationProvider = ({ children }) => {
 
     // Logout (clear password from memory)
     const logout = () => {
-        setCurrentPassword(null);
-        setCurrentUsername(null);
-        setIsAuthenticated(false);
+        localStorage.removeItem(CACHED_USERNAME_KEY);
+        setTimeout(() => {
+            setCurrentPassword(null);
+            setCurrentUsername(null);
+            setIsAuthenticated(false);
+        }, 300)
+
     };
 
     // Switch user (logout and allow different user login)
@@ -227,6 +258,11 @@ export const AuthenticationProvider = ({ children }) => {
         if (!isAuthenticated || !currentPassword) {
             throw new Error('Not authenticated');
         }
+
+        if (currentUsername === GUEST_USERNAME) {
+            return encryptionUtils.encrypt(data, GUEST_PASSWORD);
+        }
+
         return encryptionUtils.encrypt(data, currentPassword);
     };
 
@@ -235,6 +271,12 @@ export const AuthenticationProvider = ({ children }) => {
         if (!isAuthenticated || !currentPassword) {
             throw new Error('Not authenticated');
         }
+
+        // For guest users, parse the serialized data
+        if (currentUsername === GUEST_USERNAME) {
+            return encryptionUtils.decrypt(encryptedData, GUEST_PASSWORD);
+        }
+
         return encryptionUtils.decrypt(encryptedData, currentPassword);
     };
 

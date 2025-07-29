@@ -6,6 +6,12 @@ import DeleteUserModal from '../DeleteUserModal/DeleteUserModal.jsx';
 import SecurityNote from '../SecurityNote/SecurityNote.jsx';
 import ErrorMessage from '../ErrorMessage/ErrorMessage.jsx';
 import {useAuthentication} from '../../Contexts/AuthenticationContext.jsx';
+import {
+    CACHED_USERNAME_KEY,
+    GUEST_PASSWORD,
+    GUEST_USERNAME,
+    USERNAME_QUERY_PARAM
+} from "../../Constants/AuthConstants.js";
 
 const AuthenticationModal = () => {
     const {
@@ -23,19 +29,64 @@ const AuthenticationModal = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
-    // Determine initial mode based on existing users
+    // Check for query params and handle guest login
     useEffect(() => {
         if (!isLoading) {
-            if (existingUsers.length === 0) {
-                setMode('signup');
+            const urlParams = new URLSearchParams(window.location.search);
+            let usernameParam = urlParams.get(USERNAME_QUERY_PARAM);
+
+            if (!usernameParam) {
+                usernameParam = localStorage.getItem(CACHED_USERNAME_KEY);
+            }
+
+            if (usernameParam) {
+                if (usernameParam === GUEST_USERNAME) {
+                    // Auto-login as guest
+                    handleGuestLogin();
+                } else {
+                    // Skip to password step for the specified user
+                    setSelectedUser(usernameParam);
+                    setMode('login');
+                }
             } else {
-                setMode('select');
+                // No username found, determine mode based on existing users
+                if (existingUsers.length === 0) {
+                    setMode('signup');
+                } else {
+                    setMode('select');
+                }
             }
         }
     }, [isLoading, existingUsers]);
 
+    // Clear query params when user goes back to selection
+    const handleBackToSelection = () => {
+        // Clear the URL parameter when going back
+        const url = new URL(window.location);
+        url.searchParams.delete('username');
+        localStorage.removeItem(CACHED_USERNAME_KEY);
+        window.history.replaceState({}, '', url);
+
+        setSelectedUser('');
+        setMode('select');
+    };
+
+    const handleGuestLogin = async () => {
+        setError('');
+        setIsSubmitting(true);
+
+        try {
+            // Use hardcoded guest credentials
+            await authenticateUser(GUEST_USERNAME, GUEST_PASSWORD);
+            localStorage.setItem(CACHED_USERNAME_KEY, GUEST_USERNAME);
+        } catch (err) {
+            setError(err.message || 'Guest authentication failed');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const handleLogin = async (password) => {
-        console.log('handleLogin called with selectedUser:', selectedUser);
         setError('');
         setIsSubmitting(true);
 
@@ -45,6 +96,7 @@ const AuthenticationModal = () => {
                 throw new Error('No user selected');
             }
             await authenticateUser(userToLogin, password);
+            localStorage.setItem(CACHED_USERNAME_KEY, userToLogin);
         } catch (err) {
             setError(err.message || 'Authentication failed');
         } finally {
@@ -58,6 +110,7 @@ const AuthenticationModal = () => {
 
         try {
             await setupUser(username, password);
+            localStorage.setItem(CACHED_USERNAME_KEY, username);
         } catch (err) {
             setError(err.message || 'User creation failed');
         } finally {
@@ -102,6 +155,7 @@ const AuthenticationModal = () => {
                         selectedUser={selectedUser}
                         setSelectedUser={setSelectedUser}
                         setShowDeleteConfirm={setShowDeleteConfirm}
+                        onGuestLogin={handleGuestLogin}
                         {...commonProps}
                     />
                 )}
@@ -110,6 +164,8 @@ const AuthenticationModal = () => {
                     <LoginMode
                         selectedUser={selectedUser}
                         onLogin={handleLogin}
+                        isGuest={selectedUser === GUEST_USERNAME}
+                        onBackToSelection={handleBackToSelection}
                         {...commonProps}
                     />
                 )}

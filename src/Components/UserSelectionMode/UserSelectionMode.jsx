@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Users } from 'lucide-react';
 import UsernameSelector from '../UsernameSelector/UsernameSelector.jsx';
@@ -9,7 +10,8 @@ const UserSelectionMode = ({
                                setSelectedUser,
                                setShowDeleteConfirm,
                                isSubmitting,
-                               setMode
+                               setMode,
+                               onGuestLogin
                            }) => {
     return (
         <>
@@ -26,6 +28,7 @@ const UserSelectionMode = ({
                 setMode={setMode}
                 setShowDeleteConfirm={setShowDeleteConfirm}
                 isSubmitting={isSubmitting}
+                onGuestLogin={onGuestLogin}
             />
         </>
     );
