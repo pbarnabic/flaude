@@ -1,4 +1,3 @@
-
 /**
  * Generate update tool definitions for existing artifacts
  * Only generate tools for complete artifacts

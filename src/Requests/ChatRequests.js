@@ -1,12 +1,11 @@
 import {
     ensureAuthenticated,
-    getCurrentUser,
     encryptForStorage,
     decryptFromStorage
 } from '../Auth/UserSessionManager.js';
 
 import {
-    getUserDatabaseName,
+    getCurrentUserDatabaseName,
     getRecord,
     putRecord,
     addRecord,
@@ -15,17 +14,6 @@ import {
     defaultErrorHandler,
     defaultSuccessHandler
 } from './BaseStorageRequests.js';
-
-/**
- * Get the current user's database name
- */
-const getCurrentUserDatabaseName = () => {
-    const {username} = getCurrentUser();
-    if (!username) {
-        throw new Error('No current user set');
-    }
-    return getUserDatabaseName(username);
-};
 
 /**
  * Utility functions

@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {MODELS, DEFAULT_RATE_LIMITS} from "../../Constants/Models.js";
+import {putModelSettings, getModelSettings} from "../../Requests/ModelSettingsRequests.js";
 
 const ModelSettings = ({
                            showSettings,
@@ -13,6 +14,7 @@ const ModelSettings = ({
                        }) => {
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [currentLimits, setCurrentLimits] = useState({});
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         // Initialize current limits when model changes
@@ -25,13 +27,46 @@ const ModelSettings = ({
         setCurrentLimits(rateLimits[modelSettings.model] || modelDefaults);
     }, [modelSettings.model, rateLimits]);
 
-    const handleSave = () => {
-        // Save the current limits for the selected model
-        setRateLimits(prev => ({
-            ...prev,
-            [modelSettings.model]: currentLimits
-        }));
-        setShowSettings(false);
+    // Load saved model settings when component mounts
+    useEffect(() => {
+        if (!showSettings) return;
+
+        const loadModelSettings = async () => {
+            try {
+                const savedSettings = await getModelSettings(modelSettings.model);
+                // Always load the saved settings for the current model
+                setModelSettings(prev => ({
+                    ...prev,
+                    temperature: savedSettings.temperature,
+                    maxTokens: savedSettings.maxTokens
+                }));
+            } catch (error) {
+                console.error('Error loading model settings:', error);
+            }
+        };
+
+        loadModelSettings();
+    }, [showSettings]); // Only depend on showSettings, not modelSettings.model to avoid infinite loops
+
+    const handleSave = async () => {
+        setIsLoading(true);
+        try {
+            // Save the current limits for the selected model
+            setRateLimits(prev => ({
+                ...prev,
+                [modelSettings.model]: currentLimits
+            }));
+
+            // Save model-specific settings (temperature and maxTokens)
+            await putModelSettings(modelSettings);
+
+            setShowSettings(false);
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            // Could add user-visible error handling here
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleCancel = () => {
@@ -39,6 +74,27 @@ const ModelSettings = ({
         const modelDefaults = DEFAULT_RATE_LIMITS[modelSettings.model] || {};
         setCurrentLimits(rateLimits[modelSettings.model] || modelDefaults);
         setShowSettings(false);
+    };
+
+    const handleModelChange = async (newModel) => {
+        try {
+            // Load settings for the new model
+            const newModelSettings = await getModelSettings(newModel);
+            setModelSettings({
+                model: newModel,
+                temperature: newModelSettings.temperature,
+                maxTokens: newModelSettings.maxTokens
+            });
+        } catch (error) {
+            console.error('Error loading settings for new model:', error);
+            // Fallback to basic model change with defaults
+            setModelSettings(prev => ({
+                ...prev,
+                model: newModel,
+                temperature: 1.0,
+                maxTokens: 4000
+            }));
+        }
     };
 
     if (!showSettings) return null;
@@ -55,8 +111,9 @@ const ModelSettings = ({
                         <label className="block text-sm font-medium text-slate-700 mb-2">Model</label>
                         <select
                             value={modelSettings.model}
-                            onChange={(e) => setModelSettings(prev => ({...prev, model: e.target.value}))}
+                            onChange={(e) => handleModelChange(e.target.value)}
                             className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            disabled={isLoading}
                         >
                             {Object.entries(MODELS).map(([value, label]) => (
                                 <option key={value} value={value}>{`Claude ${label}`}</option>
@@ -80,6 +137,7 @@ const ModelSettings = ({
                                 temperature: parseFloat(e.target.value)
                             }))}
                             className="w-full"
+                            disabled={isLoading}
                         />
                         <div className="flex justify-between text-xs text-slate-500 mt-1">
                             <span>Conservative</span>
@@ -89,7 +147,10 @@ const ModelSettings = ({
 
                     {/* Max Tokens */}
                     <div className="mb-4">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Max Tokens</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Max Tokens
+                            <span className="text-xs text-slate-500 ml-1">(saved per model)</span>
+                        </label>
                         <input
                             type="number"
                             min="1"
@@ -97,7 +158,11 @@ const ModelSettings = ({
                             value={modelSettings.maxTokens}
                             onChange={(e) => setModelSettings(prev => ({...prev, maxTokens: parseInt(e.target.value)}))}
                             className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            disabled={isLoading}
                         />
+                        <p className="text-xs text-slate-500 mt-1">
+                            Different models may have different optimal token limits
+                        </p>
                     </div>
 
                     {/* Rate Limits Section */}
@@ -105,6 +170,7 @@ const ModelSettings = ({
                         <button
                             onClick={() => setShowAdvanced(!showAdvanced)}
                             className="flex items-center justify-between w-full text-left"
+                            disabled={isLoading}
                         >
                             <span className="text-sm font-medium text-slate-700">Rate Limits</span>
                             <svg
@@ -133,6 +199,7 @@ const ModelSettings = ({
                                             requestsPerMinute: parseInt(e.target.value)
                                         }))}
                                         className="w-full p-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={isLoading}
                                     />
                                 </div>
 
@@ -150,6 +217,7 @@ const ModelSettings = ({
                                             inputTokensPerMinute: parseInt(e.target.value)
                                         }))}
                                         className="w-full p-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={isLoading}
                                     />
                                 </div>
 
@@ -167,6 +235,7 @@ const ModelSettings = ({
                                             outputTokensPerMinute: parseInt(e.target.value)
                                         }))}
                                         className="w-full p-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={isLoading}
                                     />
                                 </div>
 
@@ -175,7 +244,8 @@ const ModelSettings = ({
                                         const defaults = DEFAULT_RATE_LIMITS[modelSettings.model];
                                         if (defaults) setCurrentLimits(defaults);
                                     }}
-                                    className="text-xs text-blue-600 hover:text-blue-700"
+                                    className="text-xs text-blue-600 hover:text-blue-700 disabled:text-slate-400"
+                                    disabled={isLoading}
                                 >
                                     Reset to defaults
                                 </button>
@@ -191,11 +261,12 @@ const ModelSettings = ({
                                 checked={showDebugInfo}
                                 onChange={(e) => setShowDebugInfo(e.target.checked)}
                                 className="sr-only"
+                                disabled={isLoading}
                             />
                             <div className="relative">
                                 <div className={`w-10 h-6 rounded-full transition-colors ${
                                     showDebugInfo ? 'bg-blue-600' : 'bg-slate-300'
-                                }`}>
+                                } ${isLoading ? 'opacity-50' : ''}`}>
                                     <div
                                         className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
                                             showDebugInfo ? 'translate-x-4' : 'translate-x-0'
@@ -215,15 +286,27 @@ const ModelSettings = ({
                     <div className="flex gap-3">
                         <button
                             onClick={handleCancel}
-                            className="flex-1 px-4 py-2 text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                            className="flex-1 px-4 py-2 text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={isLoading}
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleSave}
-                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                            disabled={isLoading}
                         >
-                            Save
+                            {isLoading ? (
+                                <>
+                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Saving...
+                                </>
+                            ) : (
+                                'Save'
+                            )}
                         </button>
                     </div>
                 </div>

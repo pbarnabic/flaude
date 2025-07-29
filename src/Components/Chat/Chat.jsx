@@ -13,7 +13,9 @@ import DebugPanel from "../DebugPanel/DebugPanel.jsx";
 import ChatLoading from "../ChatLoading/ChatLoading.jsx";
 import {useChats} from "../../Contexts/ChatsContext.jsx";
 import {useAuthentication} from "../../Contexts/AuthenticationContext.jsx";
-import {getApiKey, getRateLimits, putApiKey, putRateLimits} from "../../Requests/SettingsRequests.js";
+import {getRateLimits, putRateLimits} from "../../Requests/RateLimitsRequests.js";
+import {getModelSettings} from "../../Requests/ModelSettingsRequests.js";
+import {getApiKey, putApiKey} from "../../Requests/ApiKeyRequests.js";
 import {callClaudeAPI, streamClaudeAPI} from "../../Requests/AnthropicRequests.js";
 import {processArtifactUpdate} from "../../Utils/ToolUtils.js";
 import {ArtifactParsingUtilsV2} from "../../Utils/ArtifactParsingUtilsV2.js";
@@ -95,13 +97,24 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
                 // Load rate limits
                 const savedRateLimits = await getRateLimits();
                 setRateLimits(savedRateLimits);
+
+
             } catch (error) {
                 console.error('Error loading user settings:', error);
             }
         };
-
         loadUserSettings();
     }, [isAuthenticated, isDatabaseReady]);
+
+    useEffect(() => {
+        if (!isAuthenticated || !isDatabaseReady) return;
+
+        const loadModelSettings = async () => {
+            const savedModelSettings = await getModelSettings(modelSettings.model);
+            setModelSettings(savedModelSettings);
+        }
+        loadModelSettings();
+    }, [isAuthenticated, isDatabaseReady, modelSettings.model]);
 
     // Save API key when it changes (debounced)
     useEffect(() => {
@@ -207,22 +220,6 @@ const Chat = ({showChatSidebar, setShowChatSidebar, modelSettings: defaultModelS
         };
     }, [apiMessages, currentChat, isLoadingCurrentChat, isAuthenticated]);
 
-    // Save model settings when they change
-    useEffect(() => {
-        if (!currentChat || isLoadingCurrentChat || !isAuthenticated) return;
-
-        const updateChatSettings = async () => {
-            try {
-                // We'll use the context's updateChatById method through a different approach
-                // For now, just update local context - we can enhance this later
-                console.log('Model settings updated:', modelSettings);
-            } catch (error) {
-                console.error('Error saving model settings:', error);
-            }
-        };
-
-        updateChatSettings();
-    }, [modelSettings, currentChat, isLoadingCurrentChat, isAuthenticated]);
 
     // Get current artifacts (latest versions for processing)
     const getCurrentArtifacts = () => {

@@ -1,5 +1,3 @@
-// ImageUtils.js - Simplified for API contract only
-
 export const ImageUtils = {
     /**
      * Convert file to base64 string

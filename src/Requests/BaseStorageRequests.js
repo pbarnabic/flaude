@@ -1,3 +1,5 @@
+import {getCurrentUser} from '../Auth/UserSessionManager.js';
+
 let databaseInstances = new Map();
 
 /**
@@ -6,6 +8,17 @@ let databaseInstances = new Map();
 export const getUserDatabaseName = (username) => {
     const safeUsername = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
     return `ClaudeChatDB_${safeUsername}`;
+};
+
+/**
+ * Get the current user's database name
+ */
+export const getCurrentUserDatabaseName = () => {
+    const {username} = getCurrentUser();
+    if (!username) {
+        throw new Error('No current user set');
+    }
+    return getUserDatabaseName(username);
 };
 
 /**
@@ -21,23 +34,23 @@ export const getSystemDatabaseName = () => {
 const USER_DATABASE_STORES = [
     {
         name: 'chats',
-        options: { keyPath: 'id' },
+        options: {keyPath: 'id'},
         indexes: [
-            { name: 'updatedAt', keyPath: 'updatedAt', options: { unique: false } },
-            { name: 'createdAt', keyPath: 'createdAt', options: { unique: false } }
+            {name: 'updatedAt', keyPath: 'updatedAt', options: {unique: false}},
+            {name: 'createdAt', keyPath: 'createdAt', options: {unique: false}}
         ]
     },
     {
         name: 'messages',
-        options: { keyPath: 'id' },
+        options: {keyPath: 'id'},
         indexes: [
-            { name: 'chatId', keyPath: 'chatId', options: { unique: false } },
-            { name: 'timestamp', keyPath: 'timestamp', options: { unique: false } }
+            {name: 'chatId', keyPath: 'chatId', options: {unique: false}},
+            {name: 'timestamp', keyPath: 'timestamp', options: {unique: false}}
         ]
     },
     {
         name: 'settings',
-        options: { keyPath: 'key' }
+        options: {keyPath: 'key'}
     }
 ];
 
@@ -47,9 +60,9 @@ const USER_DATABASE_STORES = [
 const SYSTEM_DATABASE_STORES = [
     {
         name: 'users',
-        options: { keyPath: 'username' },
+        options: {keyPath: 'username'},
         indexes: [
-            { name: 'createdAt', keyPath: 'createdAt', options: { unique: false } }
+            {name: 'createdAt', keyPath: 'createdAt', options: {unique: false}}
         ]
     }
 ];
@@ -118,12 +131,12 @@ export const getDatabase = async (databaseName, version = 1, stores = []) => {
             // Create stores based on configuration
             stores.forEach(storeConfig => {
                 if (!db.objectStoreNames.contains(storeConfig.name)) {
-                    const store = db.createObjectStore(storeConfig.name, storeConfig.options || { keyPath: 'id' });
+                    const store = db.createObjectStore(storeConfig.name, storeConfig.options || {keyPath: 'id'});
 
                     // Create indexes if specified
                     if (storeConfig.indexes) {
                         storeConfig.indexes.forEach(index => {
-                            store.createIndex(index.name, index.keyPath, index.options || { unique: false });
+                            store.createIndex(index.name, index.keyPath, index.options || {unique: false});
                         });
                     }
                 }
