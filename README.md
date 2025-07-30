@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Flaude is meant to be a substitute for Claude's UI. The key difference: it uses your Anthropic API Key to make all requests, enabling you to only pay for what you use.
+Flaude is meant to be a substitute for Claude's UI. The key difference: it uses your Anthropic API Key to make all requests, enabling you to avoid the UI's usage limits.
 
 Flaude is open sourced and client-side only. All conversations, preferences and other data is encrypted using your chosen password and stored in your browser used IndexedDB.
 
