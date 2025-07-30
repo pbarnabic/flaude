@@ -50,11 +50,11 @@ const AuthenticationModal = () => {
                 }
             } else {
                 // No username found, determine mode based on existing users
-                if (existingUsers.length === 0) {
-                    setMode('signup');
-                } else {
+                // if (existingUsers.length === 0) {
+                //     setMode('signup');
+                // } else {
                     setMode('select');
-                }
+                // }
             }
         }
     }, [isLoading, existingUsers]);
