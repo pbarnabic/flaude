@@ -51,6 +51,19 @@ The Apache 2.0 license also provides an explicit patent grant, ensuring that con
 
 ---
 
+## Security
+
+- **Your Claude API key is never sent to any server**. All requests are made **locally from your browser** to Anthropic's API.
+- The API key is **encrypted using AES-GCM (256-bit)** and stored securely in **IndexedDB**, not localStorage.
+- Encryption keys are derived from your password using **PBKDF2** with:
+    - 100,000 iterations
+    - a 128-bit salt
+    - SHA-256 as the hashing algorithm
+- **Each encryption uses a fresh random IV** (96-bit), ensuring strong protection even for repeated encryptions of the same key.
+- If you use a **guest session**, a hardcoded password is used for encryption. This is convenient but **less secure**, and should only be used for temporary/demo use.
+- **No backend storage or proxy is involved** — everything is done client-side.
+- That said, you should only use Flaude on **trusted devices** to avoid malware or browser-based attacks.
+---
 ## Disclaimer
 
 This project is not affiliated with Anthropic or Claude.
