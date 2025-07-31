@@ -2,6 +2,8 @@
 
 ---
 
+![Image](https://github.com/user-attachments/assets/cb4f71b6-df5e-4379-a56d-a94d05b6b719)
+
 ## Purpose
 
 Flaude is meant to be a substitute for Claude's UI. The key difference: it uses your Anthropic API Key to make all requests, enabling you to avoid the UI's usage limits.
