@@ -47,10 +47,6 @@ Smells to address
 
 Flaude is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
-This means you are free to use, modify, and distribute Flaude — including for commercial purposes — as long as you comply with the license terms.
-
-The Apache 2.0 license also provides an explicit patent grant, ensuring that contributors cannot use patents to restrict your use of the software.
-
 ---
 
 ## Security
